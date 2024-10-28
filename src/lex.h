@@ -62,6 +62,7 @@ struct Token {
 	char *spelling;
 };
 
+void freeToken(struct Token *);
 int isInfix(enum TokenType);
 struct Token *peek(void);
 void acceptIt(void);

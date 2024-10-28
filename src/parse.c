@@ -69,11 +69,14 @@ int parsePriority(int priority)
 		return parsePrimaryExpr();
 	}
 	int left = parsePriority(priority - 1);
+	int right;
 	struct Token *next = peek();
 
 	while (isPriority(next->type, priority)) {
 		acceptIt();
-		left = fold(left, next->type, parsePriority(priority - 1));
+		right = parsePriority(priority - 1);
+		left = fold(left, next->type, right);
+		freeToken(next);
 		next = peek();
 	}
 	return left;
@@ -86,20 +89,26 @@ int parsePrimaryExpr()
 	switch (next->type) {
 	case NUMBER:
 		acceptIt();
-		return strtol(next->spelling, NULL, 10);
+		ans = strtol(next->spelling, NULL, 10);
+		freeToken(next);
+		return ans;
 	case LPAR:
 		acceptIt();
 		ans = parsePriority(MAX_P);
 		accept(RPAR);
+		freeToken(next);
 		return ans;
 	case MINUS:
 		acceptIt();
+		freeToken(next);
 		return -parsePrimaryExpr();
 	case BITWISE_NOT:
 		acceptIt();
+		freeToken(next);
 		return ~parsePrimaryExpr();
 	default:
 		fprintf(stderr, "Unexpected: `%s`\n", next->spelling);
+		freeToken(next);
 		exit(1);
 	}
 }

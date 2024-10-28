@@ -8,7 +8,7 @@ SRC_DIR := src
 
 CC := clang
 
-CFLAGS := -Wall -Wextra
+CFLAGS := -Wall -Wextra -g
 LDFLAGS := -lm
 
 SRCS := $(shell find $(SRC_DIR) -name '*.c' -or -name '*.asm')

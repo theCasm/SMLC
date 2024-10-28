@@ -8,6 +8,14 @@ struct Token *searchForNext(void);
 struct Token *lexRestNumber(char);
 struct Token *lexRestPrefix(char);
 
+void freeToken(struct Token *token)
+{
+	if (token->type == NUMBER) {
+		free(token->spelling);
+	}
+	free(token);
+}
+
 int isInfix(enum TokenType type)
 {
 	return PLUS <= type && type <= BITWISE_XOR;
@@ -28,10 +36,11 @@ void acceptIt()
 
 void accept(enum TokenType type)
 {
-	peek();
+	struct Token *next = peek();
 	if (next->type != type) {
 		fprintf(stderr, "Expected `%s` but got `%s`\n", TokenStrings[type], next->spelling);
 	}
+	freeToken(next);
 	acceptIt();
 }
 
@@ -64,6 +73,7 @@ struct Token *searchForNext()
 	case '7':
 	case '8':
 	case '9':
+		free(ans);
 		return lexRestNumber(nextChar);
 	case '(':
 		ans->type = LPAR;
@@ -127,14 +137,15 @@ struct Token *searchForNext()
 		if ((nextChar = getc(stdin)) == '=') {
 			ans->type = EQUALS;
 			ans->spelling = "==";
+			return ans;
 		} else {
 			puts("uh oh");
 			// FOR LATER:
 			// ans->type = ASSIGN;
 			// ans->spelling = "=";
 			ungetc(nextChar, stdin);
+			exit(1); // TEMPORARY! VERY BAD!
 		}
-		return ans;
 	case '!':
 		if ((nextChar = getc(stdin)) == '=') {
 			ans->type = NOT_EQUALS;
@@ -194,10 +205,10 @@ struct Token *lexRestNumber(char first)
 	struct Token *ans = malloc(sizeof(struct Token));
 	int nextChar = '\0';
 	ans->type = NUMBER;
-	ans->spelling = malloc(sizeof(char)*64);
+	ans->spelling = calloc(64, sizeof(char));
 	ans->spelling[0] = first;
 	int i = 1;
-	while (i < 64 && (isdigit((nextChar = getc(stdin))))) {
+	while (i < 63 && (isdigit((nextChar = getc(stdin))))) {
 		ans->spelling[i++] = nextChar;
 	}
 	if (nextChar != '.') {
@@ -205,12 +216,13 @@ struct Token *lexRestNumber(char first)
 		return ans;
 	}
 	ans->spelling[i++] = nextChar;
-	while (i < 64 && (isdigit((nextChar = getc(stdin))))) {
+	while (i < 63 && (isdigit((nextChar = getc(stdin))))) {
 		ans->spelling[i++] = nextChar;
 	}
 	if (nextChar != '\0') {
 		ungetc(nextChar, stdin);
 	}
+	ans->spelling[i] = '\0';
 	return ans;
 }
 

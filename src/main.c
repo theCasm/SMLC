@@ -5,7 +5,8 @@
 int main(void)
 {
 	printf("> ");
-	while (peek()->type != TOKEN_EOF) {
+	struct Token *next;
+	while ((next = peek())->type != TOKEN_EOF) {
 		fflush(stdout);
 		printf("%d\n", parse());
 		printf("> ");
