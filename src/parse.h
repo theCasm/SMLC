@@ -1,6 +1,8 @@
 #ifndef SML_PARSE_H
 #define SML_PARSE_H
 
-int parse(void);
+#include "AST.h"
+
+struct AST *parse(void);
 
 #endif

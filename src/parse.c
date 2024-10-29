@@ -1,5 +1,6 @@
 #include "lex.h"
 #include "parse.h"
+#include "AST.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -9,12 +10,15 @@
 
 extern char *fullInput;
 
-int fold(int left, enum TokenType type, int right);
-int parsePriority(int);
-int parsePrimaryExpr();
-int isPriority(enum TokenType type, int priority);
-void handleUnexpectedToken(struct Token *tok);
+static struct ASTNode *fold(struct ASTNode *left, enum TokenType type, struct ASTNode *right);
+static struct ASTNode *parsePriority(int);
+static struct ASTNode *parsePrimaryExpr();
+static int isPriority(enum TokenType type, int priority);
+static void handleUnexpectedToken(struct Token *tok);
 
+/*
+ * We will need this for precomputation later!
+ * 
 int fold(int left, enum TokenType type, int right)
 {
 	switch (type) {
@@ -58,22 +62,32 @@ int fold(int left, enum TokenType type, int right)
 		fprintf(stderr, "idk how to fold in %s\n", TokenStrings[type]);
 		return left;
 	}
-}
+}*/
 
-int parse()
+struct ASTNode *fold(struct ASTNode *left, enum TokenType type, struct ASTNode *right)
 {
-	int ans = parsePriority(MAX_P);
-	accept(LINE_END);
+	struct ASTNode *ans = newAstNode(EXPR);
+	ans->left = left;
+	ans->right = right;
+	ans->operationType = type;
 	return ans;
 }
 
-int parsePriority(int priority)
+struct AST *parse()
+{
+	struct ASTNode *head = parsePriority(MAX_P);
+	accept(LINE_END);
+	struct AST *ans = malloc(sizeof(*ans));
+	ans->root = head;
+	return ans;
+}
+
+struct ASTNode *parsePriority(int priority)
 {
 	if (priority <= 0) {
 		return parsePrimaryExpr();
 	}
-	int left = parsePriority(priority - 1);
-	int right;
+	struct ASTNode *right, *left = parsePriority(priority - 1);
 	struct Token *next = peek();
 
 	while (isPriority(next->type, priority)) {
@@ -86,10 +100,10 @@ int parsePriority(int priority)
 	return left;
 }
 
-int parsePrimaryExpr()
+struct ASTNode *parsePrimaryExpr()
 {
 	struct Token *next = peek();
-	int ans;
+	struct ASTNode *ans;
 	switch (next->type) {
 	case NUMBER:
 		acceptIt();
@@ -97,7 +111,9 @@ int parsePrimaryExpr()
 		strncpy(spelling, fullInput + next->start, next->end - next->start);
 		spelling[next->end - next->start] = '\0';
 		int base = (spelling[1] == 'x') ? 16 : ((spelling[0] == '0') ? 8 : 10);
-		ans = strtol(spelling, NULL, base);
+		ans = newAstNode(NUMBER_LITERAL);
+		ans->val = strtol(spelling, NULL, base);
+		ans->isConstant = 1;
 		freeToken(next);
 		free(spelling);
 		return ans;
@@ -110,11 +126,20 @@ int parsePrimaryExpr()
 	case MINUS:
 		acceptIt();
 		freeToken(next);
-		return -parsePrimaryExpr();
+		ans = newAstNode(EXPR);
+		ans->operationType = NEGATE;
+		ans->left = parsePrimaryExpr();
+		ans->isConstant = ans->left->isConstant;
+		return ans;
 	case BITWISE_NOT:
+	case NOT:
 		acceptIt();
+		ans = newAstNode(EXPR);
+		ans->operationType = next->type;
+		ans->left = parsePrimaryExpr();
+		ans->isConstant = ans->left->isConstant;
 		freeToken(next);
-		return ~parsePrimaryExpr();
+		return ans;
 	default:
 		handleUnexpectedToken(next);
 		freeToken(next);

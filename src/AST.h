@@ -2,8 +2,7 @@
 #define SML_AST_H
 
 #include <unistd.h>
-
-void printTree();
+#include "lex.h"
 
 enum NodeType {
     PROGRAM,
@@ -17,19 +16,47 @@ enum NodeType {
     COMMAND,
     SINGLE_COMMAND,
     IF,
-    WHILE
+    WHILE,
+    NUMBER_LITERAL
+};
+
+static const char *NODE_TYPE_STRINGS[] = {
+    "program",
+    "global declaration",
+    "function declaration",
+    "constant declaration",
+    "variable declaration",
+    "identifier",
+    "constant expression",
+    "expression",
+    "command",
+    "single command",
+    "if statement",
+    "while loop",
+    "number literal"
 };
 
 struct ASTNode {
     enum NodeType type;
+    int isConstant;
     struct ASTNode *left;
     struct ASTNode *right;
-    size_t start;
-    size_t death;
+    union {
+        struct {
+            size_t start;
+            size_t death;
+        };
+        enum TokenType operationType;
+        int val;
+    };
 };
 
 struct AST {
-    struct ASTNode *head;
+    struct ASTNode *root;
 };
+
+void printTree(struct AST *);
+struct ASTNode *newAstNode(enum NodeType type);
+void freeTree(struct AST *);
 
 #endif
