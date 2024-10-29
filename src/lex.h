@@ -1,6 +1,8 @@
 #ifndef SML_LEX_H
 #define SML_LEX_H
 
+#include <unistd.h>
+
 enum TokenType {
 	NUMBER,
 	LPAR,
@@ -59,7 +61,8 @@ static const char *TokenStrings[] = {
 
 struct Token {
 	enum TokenType type;
-	char *spelling;
+	size_t start;
+	size_t end;
 };
 
 void freeToken(struct Token *);

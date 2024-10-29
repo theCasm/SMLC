@@ -3,13 +3,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #define MAX_P 10
+
+extern char *fullInput;
 
 int fold(int left, enum TokenType type, int right);
 int parsePriority(int);
 int parsePrimaryExpr();
 int isPriority(enum TokenType type, int priority);
+void handleUnexpectedToken(struct Token *tok);
 
 int fold(int left, enum TokenType type, int right)
 {
@@ -89,8 +93,13 @@ int parsePrimaryExpr()
 	switch (next->type) {
 	case NUMBER:
 		acceptIt();
-		ans = strtol(next->spelling, NULL, 10);
+		char *spelling = calloc(next->end - next->start + 1, sizeof(char));
+		strncpy(spelling, fullInput + next->start, next->end - next->start);
+		spelling[next->end - next->start] = '\0';
+		int base = (spelling[1] == 'x') ? 16 : ((spelling[0] == '0') ? 8 : 10);
+		ans = strtol(spelling, NULL, base);
 		freeToken(next);
+		free(spelling);
 		return ans;
 	case LPAR:
 		acceptIt();
@@ -107,7 +116,7 @@ int parsePrimaryExpr()
 		freeToken(next);
 		return ~parsePrimaryExpr();
 	default:
-		fprintf(stderr, "Unexpected: `%s`\n", next->spelling);
+		handleUnexpectedToken(next);
 		freeToken(next);
 		exit(1);
 	}
@@ -142,4 +151,13 @@ int isPriority(enum TokenType type, int priority)
 	default:
 		return 0;
 	}
+}
+
+void handleUnexpectedToken(struct Token *tok)
+{
+	char *unexpectedTok = malloc(tok->end - tok->start + 1);
+	strncpy(unexpectedTok, fullInput + tok->start, tok->end - tok->start);
+	unexpectedTok[tok->end - tok->start] = '\0';
+	fprintf(stderr, "Unexpected: `%s`\n", unexpectedTok);
+	free(unexpectedTok);
 }
