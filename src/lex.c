@@ -7,12 +7,16 @@
 static struct Token *next = NULL;
 struct Token *searchForNext(void);
 struct Token *lexRestNumber(struct Token *);
-struct Token *lexRestPrefix(char);
+static struct Token *checkForIdentifier(struct Token *ans);
+static struct Token *handleUnrecognized(int, int);
+static int checkInputAgainstStr(char *, int);
 
 size_t inputIndex = 0;
 char *fullInput = NULL;
 size_t fullInputSize = 0;
 
+// TODO: calling getchar not necessary if we already have next char buffered
+// though it won't make any performance difference as stdlib is really good with character buffering.
 int getNextChar() {
 	if (fullInput == NULL) {
 		fullInput = calloc(512, sizeof(char));
@@ -26,9 +30,8 @@ int getNextChar() {
 	return ans;
 }
 
-void undoNextChar(char c) {
-	inputIndex--;
-	ungetc(c, stdin);
+void undoNextChar() {
+	ungetc(fullInput[--inputIndex], stdin);
 }
 
 void freeToken(struct Token *token)
@@ -49,8 +52,13 @@ struct Token *peek()
 	return next;
 }
 
+/*
+ * Accepts last token as correct and deletes it.
+ * once a token is accepted, it is gone forever - no use after free's, please!
+*/
 void acceptIt()
 {
+	freeToken(next);
 	next = NULL;
 }
 
@@ -64,7 +72,6 @@ void accept(enum TokenType type)
 		fprintf(stderr, "Expected `%s` but got `%s`\n", TokenStrings[type], unexpectedTok);
 		free(unexpectedTok);
 	}
-	freeToken(next);
 	acceptIt();
 }
 
@@ -74,7 +81,10 @@ struct Token *searchForNext()
 {
 	int nextChar;
 	struct Token *ans = malloc(sizeof(struct Token));
-	while ((nextChar = getNextChar()) == ' ' || nextChar == '\t');
+	nextChar = getNextChar();
+	while (nextChar == ' ' || nextChar == '\t') {
+		nextChar = getNextChar();
+	}
 	ans->start = inputIndex - 1;
 	if (nextChar == EOF) {
 		ans->type = TOKEN_EOF;
@@ -106,6 +116,12 @@ struct Token *searchForNext()
 	case ')':
 		ans->type = RPAR;
 		break;
+	case '{':
+		ans->type = LCPAR;
+		break;
+	case '}':
+		ans->type = RCPAR;
+		break;
 	case '-':
 		ans->type = MINUS;
 		break;
@@ -131,7 +147,7 @@ struct Token *searchForNext()
 			ans->type = LESS_THAN_EQUALS;
 		} else {
 			ans->type = LESS_THAN;
-			undoNextChar(nextChar);
+			undoNextChar();
 		}
 		break;
 	case '>':
@@ -141,27 +157,23 @@ struct Token *searchForNext()
 			ans->type = GREATER_THAN_EQUALS;
 		} else {
 			ans->type = GREATER_THAN;
-			undoNextChar(nextChar);
+			undoNextChar();
 		}
 		break;
 	case '=':
 		if ((nextChar = getNextChar()) == '=') {
 			ans->type = EQUALS;
 			break;
-		} else {
-			puts("uh oh");
-			// FOR LATER:
-			// ans->type = ASSIGN;
-			// ans->spelling = "=";
-			undoNextChar(nextChar);
-			exit(1); // TEMPORARY! VERY BAD!
 		}
+		undoNextChar();
+		ans->type = ASSIGN;
+		break;
 	case '!':
 		if ((nextChar = getNextChar()) == '=') {
 			ans->type = NOT_EQUALS;
 		} else {
 			ans->type = NOT;
-			undoNextChar(nextChar);
+			undoNextChar();
 		}
 		break;
 	case '&':
@@ -173,28 +185,12 @@ struct Token *searchForNext()
 	case '|':
 		ans->type = BITWISE_OR;
 		break;
-	case 'a':
-	case 'A':
-		char1 = getNextChar();
-		char2 = getNextChar();
-		if (tolower(char1) == 'n' && tolower(char2) == 'd') {
-			ans->type = AND;
-			break;
-		}
-		undoNextChar(char2);
-		undoNextChar(char1);
-		//continue on
-	case 'o':
-	case 'O':
-		char1 = getNextChar();
-		if (tolower(char1) == 'r') {
-			ans->type = OR;
-			break;
-		}
-		undoNextChar(char1);
-		//continue on
+	case ',':
+		ans->type = COMMA;
+		break;
 	default:
-		return lexRestPrefix(nextChar);
+		undoNextChar();
+		return checkForIdentifier(ans);
 	}
 	ans->end = inputIndex;
 	return ans;
@@ -207,21 +203,127 @@ struct Token *lexRestNumber(struct Token *ans)
 	int i = 0;
 	while ((isdigit((nextChar = getNextChar())) || (i == 0 && nextChar == 'x'))) i++;
 	if (nextChar != '.') {
-		undoNextChar(nextChar);
+		undoNextChar();
 		ans->end = inputIndex;
 		return ans;
 	}
 	while ((isdigit((nextChar = getNextChar())))) {}
 	if (nextChar != '\0') {
-		undoNextChar(nextChar);
+		undoNextChar();
 	}
 	ans->end = inputIndex;
 	return ans;
 }
 
-struct Token *lexRestPrefix(char first)
+static struct Token *checkForIdentifier(struct Token *ans)
+{
+	int nextChar = getNextChar();
+	ans->type = -1;
+	switch(nextChar) {
+	case 'a':
+	case 'A':
+		if (checkInputAgainstStr("nd", 1)) {
+			ans->type = AND;
+		}
+		break;
+	case 'c':
+	case 'C':
+		if (checkInputAgainstStr("onst", 1)) {
+			ans->type = CONST;
+		}
+		break;
+	case 'f':
+	case 'F':
+		if (checkInputAgainstStr("unc", 1)) {
+			ans->type = FUNC;
+		}
+		break;
+	case 'i':
+	case 'I':
+		if (checkInputAgainstStr("f", 1)) {
+			ans->type = IF;
+		}
+		break;
+	case 'n':
+	case 'N':
+		if (checkInputAgainstStr("on-void", 1)) {
+			ans->type = NON_VOID;
+		}
+		break;
+	case 'o':
+	case 'O':
+		char1 = getNextChar();
+		if (tolower(char1) == 'r') {
+			ans->type = OR;
+		}
+		break;
+	case 'v':
+	case 'V':
+		if (checkInputAgainstStr("ar", 1)) {
+			ans->type = VAR;
+		} else if (checkInputAgainstStr("oid", 1)) {
+			ans->type = VOID;
+		}
+		break;
+	case 'w':
+	case 'W':
+		if (checkInputAgainstStr("hile", 1)) {
+			ans->type = WHILE;
+		}
+		break;
+	}
+	if (ans->type != -1) {
+		ans->end = inputIndex;
+		return ans;
+	}
+	if (!isalpha(nextChar)) {
+		handleUnrecognized(ans->start, inputIndex);
+	}
+	ans->type = IDENTIFIER;
+	do {
+		nextChar = getNextChar();
+	} while (isalnum(nextChar));
+	undoNextChar();
+	ans->end = inputIndex;
+	return ans;
+}
+
+/*
+ * Compares next characters case-insensative to s.
+ * if peek = 0: will not unget characters, no matter what.
+ * if peek = 1: will unget characters if the comparison fails. 
+ * if peek = 2: will unget characters no matter what
+ * 
+ * I have not entirely decided which form to use, so for now all of these options are available.
+ * TODO: replace these constants with a static enum
+ *
+ * REQUIRES: len(s) >= 1
+*/
+static int checkInputAgainstStr(char *s, int peek)
+{
+	int next;
+	size_t i = 0;
+
+	while (i < strlen(s)) {
+		if (tolower((next = getNextChar())) != tolower(s[i++])) {
+			while ((peek >= 1) && i-- > 0) {
+				undoNextChar();
+			}
+			return 0;
+		}
+	}
+	while ((peek == 2) && i-- > 0) {
+				undoNextChar();
+	}
+	return 1;
+}
+
+static struct Token *handleUnrecognized(int start, int end)
 {
 	// for now
-	fprintf(stderr, "Unrecognized token: %c\n", first);
+	char *spelling = calloc(end - start + 1, sizeof(char));
+	strncpy(spelling, fullInput + start, end - start);
+	spelling[end - start] = '\0';
+	fprintf(stderr, "Unrecognized token: %s\n                    ^\n", spelling);
 	exit(1);
 }

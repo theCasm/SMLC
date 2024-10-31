@@ -8,15 +8,20 @@ enum NodeType {
     PROGRAM,
     GLOBAL_DECL,
     FN_DECL,
+    PARAM_LIST,
+    ARG_LIST,
     CONST_DECL,
     VAR_DECL,
-    IDENTIFIER,
+    DIRECT_ASSIGN,
+    INDIRECT_ASSIGN,
+    VAR_REF,
+    FUNC_CALL,
     CONST_EXPR,
     EXPR,
     COMMAND,
     SINGLE_COMMAND,
-    IF,
-    WHILE,
+    IF_EXPR,
+    WHILE_LOOP,
     NUMBER_LITERAL
 };
 
@@ -24,12 +29,17 @@ static const char *NODE_TYPE_STRINGS[] = {
     "program",
     "global declaration",
     "function declaration",
+    "parameter list",
+    "argument list",
     "constant declaration",
     "variable declaration",
-    "identifier",
+    "direct assignment",
+    "indirect assignment",
+    "variable reference",
+    "function call",
     "constant expression",
     "expression",
-    "command",
+    "command block",
     "single command",
     "if statement",
     "while loop",
@@ -39,24 +49,34 @@ static const char *NODE_TYPE_STRINGS[] = {
 struct ASTNode {
     enum NodeType type;
     int isConstant;
-    struct ASTNode *left;
-    struct ASTNode *right;
+    struct ASTLinkedNode *children;
+    size_t posStart;
+    size_t posEnd;
     union {
         struct {
             size_t start;
             size_t death;
         };
         enum TokenType operationType;
+        int isVoid;
         int val;
     };
 };
 
+struct ASTLinkedNode {
+    struct ASTLinkedNode *next;
+    struct ASTNode val;
+};
+
 struct AST {
-    struct ASTNode *root;
+    struct ASTLinkedNode *root;
 };
 
 void printTree(struct AST *);
 struct ASTNode *newAstNode(enum NodeType type);
+struct ASTLinkedNode *newLinkedAstNode(enum NodeType type);
+struct ASTLinkedNode *linkNode(struct ASTNode *);
 void freeTree(struct AST *);
+void freeTreeHelper(struct ASTLinkedNode *);
 
 #endif

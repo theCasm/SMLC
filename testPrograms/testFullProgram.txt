@@ -1,0 +1,41 @@
+var m
+var n
+var s
+
+func void main() {
+    calcAverages(s, n)
+    insertSort(s, n)
+    m = *(s + (n << 1))
+}
+
+func void calcAverages(s, n) {
+    var i = 0
+    while i != n {
+        var b = s + 24*i
+        var average = *(b + 4) + *(b + 8) + *(b + 12) + *(b + 16)
+        *(b + 20) = (average >> 2)
+        i = i + 1
+    }
+}
+func void insertSort(s, n) {
+    var i = 1
+    while i != n {
+        var j = i
+        while j != 0 and *(s + 24*j - 4) > *(s + 24*j + 20) {
+            var b = s + 24*j
+            swap(b, s + 24*j - 24)
+            swap(b + 4, b - 20)
+            swap(b + 8, b - 16)
+            swap(b + 12, b - 12)
+            swap(b + 16, b - 8)
+            swap(b + 20, b - 4)
+            j = j - 1
+        }
+    }
+}
+
+func void swap(pos1, pos2) {
+    var t = *pos2
+    *pos2 = *pos1
+    *pos1 = t
+}

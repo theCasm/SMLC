@@ -11,7 +11,7 @@ CC := clang
 CFLAGS := -Wall -Wextra -g
 LDFLAGS := -lm
 
-SRCS := $(shell find $(SRC_DIR) -name '*.c' -or -name '*.asm')
+SRCS := $(shell find $(SRC_DIR) -name '*.c')
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 $(BUILD_DIR)/$(TARGET): $(OBJS)

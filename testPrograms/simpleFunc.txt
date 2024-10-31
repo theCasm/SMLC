@@ -1,0 +1,5 @@
+func void swap(pos1, pos2) {
+    var t = *pos2
+    *pos2 = *pos1
+    *pos1 = t
+}

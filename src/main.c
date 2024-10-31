@@ -8,13 +8,13 @@ int main(void)
 {
 	printf("> ");
 	struct Token *next;
-	struct AST *ast;
+	struct AST *expr;
 	while ((next = peek())->type != TOKEN_EOF) {
 		fflush(stdout);
-		//printf("%d\n", parse());
-		ast = parse();
-		printTree(ast);
-		freeTree(ast);
+		//printf("%d\n", parseExpr());
+		expr = parse();
+		printTree(expr);
+		freeTree(expr);
 		putchar('\n');
 		printf("> ");
 	}

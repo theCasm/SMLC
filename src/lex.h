@@ -4,9 +4,22 @@
 #include <unistd.h>
 
 enum TokenType {
+	CONST,
+	VAR,
+	ASSIGN,
+	FUNC,
+	VOID,
+	NON_VOID,
+	IF,
+	WHILE,
+	IDENTIFIER,
+	COMMA,
+	DEREF, // just here for operation type purposes
 	NUMBER,
 	LPAR,
 	RPAR,
+	LCPAR,
+	RCPAR,
 	NEGATE,
 	PLUS,
 	MINUS,
@@ -33,9 +46,22 @@ enum TokenType {
 };
 
 static const char *TokenStrings[] = {
+	"const",
+	"var",
+	"assign",
+	"func",
+	"void",
+	"non-void",
+	"if",
+	"while",
+	"identifier",
+	",",
+	"de-reference",
 	"Number",
 	"(",
 	")",
+	"{",
+	"}",
 	"-",
 	"+",
 	"-",
