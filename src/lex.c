@@ -62,6 +62,10 @@ void acceptIt()
 	next = NULL;
 }
 
+/*
+ * Same as acceptIt, except we want to ensure we are getting the right thing.
+ * If not, we print an unhelpful error and pretend everything is fine.
+*/
 void accept(enum TokenType type)
 {
 	struct Token *next = peek();
@@ -75,10 +79,15 @@ void accept(enum TokenType type)
 	acceptIt();
 }
 
-int char1, char2;
-
+/*
+ * Finds next Token and returns it.
+ *
+ * There is little to say here. It looks super scary.
+ * Writing it doubled the length of my chest hair.
+*/
 struct Token *searchForNext()
 {
+	int char1, char2;
 	int nextChar;
 	struct Token *ans = malloc(sizeof(struct Token));
 	nextChar = getNextChar();
@@ -196,6 +205,9 @@ struct Token *searchForNext()
 	return ans;
 }
 
+/*
+ * find end of the number we have stumbled upon.
+*/
 struct Token *lexRestNumber(struct Token *ans)
 {
 	int nextChar = '\0';
@@ -215,8 +227,16 @@ struct Token *lexRestNumber(struct Token *ans)
 	return ans;
 }
 
+/*
+ * Needs no characters to have been gotten yet!
+ *
+ * Searches for any of our string keywords otherwise assumes it's an identifier.
+ * speaking of which:
+ * Identifier ::=  [A-Za-z] [A-Za-z0-9]*
+*/
 static struct Token *checkForIdentifier(struct Token *ans)
 {
+	int char1, char2;
 	int nextChar = getNextChar();
 	ans->type = -1;
 	switch(nextChar) {
@@ -295,7 +315,7 @@ static struct Token *checkForIdentifier(struct Token *ans)
  * if peek = 2: will unget characters no matter what
  * 
  * I have not entirely decided which form to use, so for now all of these options are available.
- * TODO: replace these constants with a static enum
+ * TODO: replace these constants with a static enum or smthn
  *
  * REQUIRES: len(s) >= 1
 */
@@ -318,6 +338,9 @@ static int checkInputAgainstStr(char *s, int peek)
 	return 1;
 }
 
+/*
+ *  if you've managed to confuse the lexer, you deserve a solid looking error message.
+*/
 static struct Token *handleUnrecognized(int start, int end)
 {
 	// for now

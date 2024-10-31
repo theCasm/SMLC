@@ -86,6 +86,9 @@ int fold(int left, enum TokenType type, int right)
 	}
 }*/
 
+/*
+ * Takes two expressions and an operator and combines them into one operation appropriately.
+*/
 static struct ASTLinkedNode *foldExpr(struct ASTLinkedNode *left, enum TokenType type, struct ASTLinkedNode *right)
 {
 	struct ASTLinkedNode *ans = newLinkedAstNode(EXPR);
@@ -97,6 +100,11 @@ static struct ASTLinkedNode *foldExpr(struct ASTLinkedNode *left, enum TokenType
 	return ans;
 }
 
+/*
+ * Does the thing.
+ *
+ * exists to hide all the messy wiring actually involved in parsing.
+*/
 struct AST *parse()
 {
 	struct ASTLinkedNode *head = parseProgram();
@@ -106,7 +114,7 @@ struct AST *parse()
 }
 
 /*
- * program ::= (globalDecl | EOL)*
+ * program ::= globalDecl (globalDecl | EOL)*
 */
 struct ASTLinkedNode *parseProgram()
 {
@@ -368,7 +376,7 @@ static struct ASTLinkedNode *parseVarDecl()
  * directAssignment ::= Identifier '=' Expr EOL
  * or
  * functionCall ::= Identifier ArgList EOL
- * not LL(1), so we need to break it up
+ * together, these are not LL(1), so we need to break it up
 */
 static struct ASTLinkedNode *parseIdentifierCommand()
 {
