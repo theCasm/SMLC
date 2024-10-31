@@ -252,6 +252,12 @@ static struct Token *checkForIdentifier(struct Token *ans)
 			ans->type = CONST;
 		}
 		break;
+	case 'e':
+	case 'E':
+		if (checkInputAgainstStr("lse", 1)) {
+			ans->type = ELSE;
+		}
+		break;
 	case 'f':
 	case 'F':
 		if (checkInputAgainstStr("unc", 1)) {

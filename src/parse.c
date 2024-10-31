@@ -307,7 +307,7 @@ static struct ASTLinkedNode *parseParamList()
 }
 
 /*
- * IfExpr ::= IF Expr single-command
+ * IfExpr ::= IF Expr single-command (ELSE single-command)?
 */
 static struct ASTLinkedNode *parseIfExpr()
 {
@@ -315,6 +315,10 @@ static struct ASTLinkedNode *parseIfExpr()
 	accept(IF);
 	ans->val.children = parseExpr();
 	ans->val.children->next = parseSingleCommand();
+	if (peek()->type == ELSE) {
+		acceptIt();
+		ans->val.children->next->next = parseSingleCommand();
+	}
 	return ans;
 }
 
