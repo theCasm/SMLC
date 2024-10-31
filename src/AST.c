@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 static void printTreeHelper(struct ASTLinkedNode *curr, int tabs);
+static void freeTreeHelper(struct ASTLinkedNode *n);
 
 void printTree(struct AST *tree)
 {
@@ -70,18 +71,7 @@ struct ASTLinkedNode *newLinkedAstNode(enum NodeType type)
     return ans;
 }
 
-struct ASTLinkedNode *linkNode(struct ASTNode *n)
-{
-    struct ASTLinkedNode *ans = newLinkedAstNode(n->type);
-    ans->val.children = n->children;
-    ans->val.isConstant = n->isConstant;
-    ans->val.start = n->start;
-    ans->val.death = n->death;
-    free(n); // if we have any dangling pointers, they're made here!
-    return ans;
-}
-
-void freeTreeHelper(struct ASTLinkedNode *n)
+static void freeTreeHelper(struct ASTLinkedNode *n)
 {
     if (n == NULL) {
         return;

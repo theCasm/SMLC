@@ -39,7 +39,7 @@ static struct ASTLinkedNode *foldExpr(struct ASTLinkedNode *left, enum TokenType
 static struct ASTLinkedNode *parseProgram();
 static struct ASTLinkedNode *parseGlobalDecl();
 static struct ASTLinkedNode *parseCommand();
-struct ASTLinkedNode *parseSingleCommand();
+static struct ASTLinkedNode *parseSingleCommand();
 static struct ASTLinkedNode *parseFunctionDecl();
 static struct ASTLinkedNode *parseParamList();
 static struct ASTLinkedNode *parseArgList();

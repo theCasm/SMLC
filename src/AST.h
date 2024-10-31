@@ -75,8 +75,6 @@ struct AST {
 void printTree(struct AST *);
 struct ASTNode *newAstNode(enum NodeType type);
 struct ASTLinkedNode *newLinkedAstNode(enum NodeType type);
-struct ASTLinkedNode *linkNode(struct ASTNode *);
 void freeTree(struct AST *);
-void freeTreeHelper(struct ASTLinkedNode *);
 
 #endif
