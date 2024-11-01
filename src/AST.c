@@ -54,7 +54,9 @@ struct ASTNode *newAstNode(enum NodeType type)
     ans->type = type;
     ans->children = NULL;
     ans->isConstant = 0;
-    ans->start = -1;
+    ans->startIndex = 0;
+    ans->endIndex = 0;
+    ans->birth = -1;
     ans->death = -1;
     return ans;
 }
@@ -65,7 +67,9 @@ struct ASTLinkedNode *newLinkedAstNode(enum NodeType type)
     ans->val.type = type;
     ans->val.children = NULL;
     ans->val.isConstant = 0;
-    ans->val.start = -1;
+    ans->val.startIndex = 0;
+    ans->val.endIndex = 0;
+    ans->val.birth = -1;
     ans->val.death = -1;
     ans->next = NULL;
     return ans;

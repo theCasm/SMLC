@@ -14,7 +14,7 @@ enum NodeType {
     VAR_DECL,
     DIRECT_ASSIGN,
     INDIRECT_ASSIGN,
-    VAR_REF,
+    IDENT_REF,
     FUNC_CALL,
     CONST_EXPR,
     EXPR,
@@ -35,7 +35,7 @@ static const char *NODE_TYPE_STRINGS[] = {
     "variable declaration",
     "direct assignment",
     "indirect assignment",
-    "variable reference",
+    "identifier reference",
     "function call",
     "constant expression",
     "expression",
@@ -50,11 +50,11 @@ struct ASTNode {
     enum NodeType type;
     int isConstant;
     struct ASTLinkedNode *children;
-    size_t posStart;
-    size_t posEnd;
+    size_t startIndex;
+    size_t endIndex;
     union {
         struct {
-            size_t start;
+            size_t birth;
             size_t death;
         };
         enum TokenType operationType;

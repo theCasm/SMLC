@@ -52,6 +52,7 @@ static struct ASTLinkedNode *parseIndirectAssignment();
 static struct ASTLinkedNode *parsePriority(int);
 static struct ASTLinkedNode *parseExpr();
 static struct ASTLinkedNode *parsePrimaryExpr();
+static struct ASTLinkedNode *handleIdentifier();
 static int isPriority(enum TokenType type, int priority);
 static struct ASTLinkedNode *handleUnexpectedToken(struct Token *tok);
 
@@ -113,7 +114,6 @@ static struct ASTLinkedNode *foldExpr(struct ASTLinkedNode *left, enum TokenType
 	left->next = right;
 	// hopefully right->next is NULL!
 	ans->val.operationType = type;
-	ans->val.isConstant = left->val.isConstant && right->val.isConstant;
 	return ans;
 }
 
@@ -217,20 +217,16 @@ struct ASTLinkedNode *parseSingleCommand()
 	switch (next->type) {
 	case CONST:
 		ans->val.children = parseConstDecl();
-		ans->val.isConstant = 1;
 		//fprintf(stderr, "%p\n", ans->val.children);
 		return ans;
 	case VAR:
 		ans->val.children = parseVarDecl();
-		ans->val.isConstant = ans->val.children->val.isConstant;
 		return ans;
 	case IF:
 		ans->val.children = parseIfExpr();
-		ans->val.isConstant = ans->val.children->val.isConstant;
 		return ans;
 	case WHILE:
 		ans->val.children = parseWhileLoop();
-		ans->val.isConstant = ans->val.children->val.isConstant;
 		return ans;
 	case LCPAR:
 		acceptIt();
@@ -265,10 +261,12 @@ static struct ASTLinkedNode *parseFunctionDecl()
 	}
 	ans->val.isVoid = next->type == VOID;
 	acceptIt();
-	// TODO: care about the identifier. probably make parser function to turn it into something useful.
-	accept(IDENTIFIER);
-	ans->val.children = parseParamList();
-	ans->val.children->next = parseSingleCommand();
+	next = peek();
+	ans->val.startIndex = next->start;
+	ans->val.endIndex = next->end;
+	ans->val.children = handleIdentifier();
+	ans->val.children->next = parseParamList();
+	ans->val.children->next->next = parseSingleCommand();
 	return ans;
 }
 
@@ -306,17 +304,24 @@ static struct ASTLinkedNode *parseArgList()
 */
 static struct ASTLinkedNode *parseParamList()
 {
-	struct ASTLinkedNode *child, *ans = newLinkedAstNode(PARAM_LIST);
+	struct ASTLinkedNode *child = NULL, *ans = newLinkedAstNode(PARAM_LIST);
 	// im sorry for unused var clang - we will need it later though!
 	accept(LPAR);
 	struct Token *next = peek();
 	if (next->type == IDENTIFIER) {
-		acceptIt();
+		child = handleIdentifier();
+		ans->val.children = child;
 		next = peek();
 	}
 	while (next->type != RPAR) {
 		accept(COMMA);
-		accept(IDENTIFIER);
+		if (child == NULL) {
+			child = handleIdentifier();
+			ans->val.children = child;
+		} else {
+			child->next = handleIdentifier();
+			child = child->next;
+		}
 		next = peek();
 	}
 	accept(RPAR);
@@ -356,20 +361,15 @@ static struct ASTLinkedNode *parseWhileLoop()
 */
 static struct ASTLinkedNode *parseConstDecl()
 {
+	struct ASTLinkedNode *ans = newLinkedAstNode(CONST_DECL);
+
 	accept(CONST);
-	accept(IDENTIFIER);
+	ans->val.children = handleIdentifier();
 	accept(ASSIGN);
 	struct ASTLinkedNode *expr = parseExpr();
 	accept(LINE_END);
-	if (!expr->val.isConstant) {
-		// no! bad! bad programmer!
-		// TODO: actually include declaration that was bad.
-		fputs("constant variable declared with non-constant expression :(\n", stderr);
-		exit(1);
-	}
-	struct ASTLinkedNode *ans = newLinkedAstNode(CONST_DECL);
-	ans->val.children = expr;
-	ans->val.isConstant = 1;
+
+	ans->val.children->next = expr;
 	return ans;
 }
 
@@ -379,15 +379,13 @@ static struct ASTLinkedNode *parseConstDecl()
 static struct ASTLinkedNode *parseVarDecl()
 {
 	struct ASTLinkedNode *ans = newLinkedAstNode(VAR_DECL);
-	ans->val.isConstant = 0;
 	accept(VAR);
-	accept(IDENTIFIER);
+	ans->val.children = handleIdentifier();
 	struct Token *next = peek();
 	if (next->type != LINE_END) {
 		accept(ASSIGN);
 		struct ASTLinkedNode *expr = parseExpr();
-		ans->val.children = expr;
-		ans->val.isConstant = ans->val.children->val.isConstant;
+		ans->val.children->next = expr;
 	}
 	accept(LINE_END);
 	return ans;
@@ -401,17 +399,19 @@ static struct ASTLinkedNode *parseVarDecl()
 */
 static struct ASTLinkedNode *parseIdentifierCommand()
 {
-	struct ASTLinkedNode *ans = newLinkedAstNode(DIRECT_ASSIGN);
-	accept(IDENTIFIER); // TODO: something with this
+	struct ASTLinkedNode *child, *ans = newLinkedAstNode(DIRECT_ASSIGN);
+	child = handleIdentifier();
+	ans->val.children = child;
+
 	struct Token *next = peek();
 	if (next->type == LPAR) {
 		ans->val.type = FUNC_CALL;
-		ans->val.children = parseArgList();
+		child->next = parseArgList();
 		accept(LINE_END);
 		return ans;
 	}
 	accept(ASSIGN);
-	ans->val.children = parseExpr();
+	child->next = parseExpr();
 	accept(LINE_END);
 	return ans;
 }
@@ -478,26 +478,16 @@ static struct ASTLinkedNode *parsePrimaryExpr()
 		int base = (spelling[1] == 'x') ? 16 : ((spelling[0] == '0') ? 8 : 10);
 		ans = newLinkedAstNode(NUMBER_LITERAL);
 		ans->val.val = strtol(spelling, NULL, base);
-		ans->val.isConstant = 1;
 		free(spelling);
 		acceptIt();
 		return ans;
 	case IDENTIFIER:
-		// some kind of variable or smthn
-		// TODO:
-		// at this point, we should check if the identifier is a function - for now, we will assume based on context
-		acceptIt();
+		ans = handleIdentifier();
 		next = peek();
 		if (next->type == LPAR) {
-			ans = newLinkedAstNode(FUNC_CALL);
+			ans->val.type = FUNC_CALL;
 			ans->val.children = parseArgList();
-			// this is a memory leak, btw. Im not fixing it so that way I cant ignore the TODO
-			// we will need to use the result in some way. perhaps make a function call node with these as its children.
 		}
-		// VERY VERY TODO
-		ans = newLinkedAstNode(NUMBER_LITERAL);
-		ans->val.val = 0;
-		ans->val.isConstant = 0;
 		return ans;
 	case LPAR:
 		acceptIt();
@@ -509,7 +499,6 @@ static struct ASTLinkedNode *parsePrimaryExpr()
 		ans = newLinkedAstNode(EXPR);
 		ans->val.operationType = NEGATE;
 		ans->val.children = parsePrimaryExpr();
-		ans->val.isConstant = ans->val.children->val.isConstant;
 		return ans;
 	case BITWISE_NOT:
 	case NOT:
@@ -517,20 +506,28 @@ static struct ASTLinkedNode *parsePrimaryExpr()
 		ans->val.operationType = next->type;
 		acceptIt();
 		ans->val.children = parsePrimaryExpr();
-		ans->val.isConstant = ans->val.children->val.isConstant;
 		return ans;
 	case TIMES:
 		ans = newLinkedAstNode(EXPR);
 		ans->val.operationType = DEREF;
 		acceptIt();
 		ans->val.children = parsePrimaryExpr();
-		ans->val.isConstant = 0;
 		return ans;
 	default:
 		puts("primary unexpected");
 		handleUnexpectedToken(next);
 		exit(1);
 	}
+}
+
+static struct ASTLinkedNode *handleIdentifier()
+{
+	struct Token *next = peek();
+	struct ASTLinkedNode *ans = newLinkedAstNode(IDENT_REF);
+	ans->val.startIndex = next->start;
+	ans->val.endIndex = next->end;
+	accept(IDENTIFIER);
+	return ans;
 }
 
 /*
