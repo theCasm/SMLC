@@ -20,6 +20,7 @@ enum NodeType {
     EXPR,
     COMMAND,
     SINGLE_COMMAND,
+    RETURN_DIRECTIVE,
     IF_EXPR,
     WHILE_LOOP,
     NUMBER_LITERAL
@@ -41,6 +42,7 @@ static const char *NODE_TYPE_STRINGS[] = {
     "expression",
     "command block",
     "single command",
+    "return directive",
     "if statement",
     "while loop",
     "number literal"
@@ -54,12 +56,14 @@ struct ASTNode {
     size_t endIndex;
     union {
         struct {
+            // for variables
             size_t birth;
             size_t death;
         };
-        enum TokenType operationType;
-        int isVoid;
-        int val;
+        enum TokenType operationType; // for expressions
+        int isVoid; // for functions
+        int val; // for constants
+        struct ASTLinkedNode *definition; // for references
     };
 };
 
