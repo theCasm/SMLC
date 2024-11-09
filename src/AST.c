@@ -28,6 +28,7 @@ void printTree(struct AST *tree)
     printTreeHelper(tree->root, 0);
 }
 
+// TODO: print context decorations, if they exist.
 static void printTreeHelper(struct ASTLinkedNode *curr, int tabs)
 {
     if (curr == NULL) {

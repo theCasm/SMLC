@@ -2,6 +2,10 @@ var m
 var n
 var s
 
+func void calcAverages(s, n) return
+
+func void insertSort(s, n) return
+
 func void main() {
     calcAverages(s, n)
     insertSort(s, n)

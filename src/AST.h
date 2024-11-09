@@ -61,9 +61,11 @@ struct ASTNode {
             size_t death;
         };
         enum TokenType operationType; // for expressions
-        int isVoid; // for functions
         int val; // for constants
-        struct ASTLinkedNode *definition; // for references
+        struct {
+            int isVoid; // for functions
+            struct ASTLinkedNode *definition; // for references
+        };
     };
 };
 

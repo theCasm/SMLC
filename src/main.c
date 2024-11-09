@@ -18,6 +18,7 @@
 #include "parse.h"
 #include "lex.h"
 #include "AST.h"
+#include "contextualAnalysis.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,7 +30,7 @@ int main(void)
 	while ((next = peek())->type != TOKEN_EOF) {
 		fflush(stdout);
 		//printf("%d\n", parseExpr());
-		expr = parse();
+		expr = analyze(parse());
 		printTree(expr);
 		freeTree(expr);
 		putchar('\n');
