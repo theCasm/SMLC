@@ -1,0 +1,7 @@
+var a
+var b
+
+func void main(c) {
+    a = a + b + c
+    var e = d + a
+}

@@ -1,0 +1,6 @@
+var a
+const b = a
+
+func void main() {
+    
+}
