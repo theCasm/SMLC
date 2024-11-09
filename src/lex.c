@@ -104,7 +104,6 @@ void accept(enum TokenType type)
 */
 struct Token *searchForNext()
 {
-	int char1, char2;
 	int nextChar;
 	struct Token *ans = malloc(sizeof(struct Token));
 	nextChar = getNextChar();
@@ -253,7 +252,7 @@ struct Token *lexRestNumber(struct Token *ans)
 */
 static struct Token *checkForIdentifier(struct Token *ans)
 {
-	int char1, char2;
+	int char1;
 	int nextChar = getNextChar();
 	ans->type = -1;
 	switch(nextChar) {
@@ -298,6 +297,12 @@ static struct Token *checkForIdentifier(struct Token *ans)
 		char1 = getNextChar();
 		if (tolower(char1) == 'r') {
 			ans->type = OR;
+		}
+		break;
+	case 'r':
+	case 'R':
+		if (checkInputAgainstStr("eturn", 1)) {
+			ans->type = RETURN;
 		}
 		break;
 	case 'v':
@@ -368,8 +373,26 @@ static struct Token *handleUnrecognized(int start, int end)
 {
 	// for now
 	char *spelling = calloc(end - start + 1, sizeof(char));
-	strncpy(spelling, fullInput + start, end - start);
-	spelling[end - start] = '\0';
+	getInputSubstr(spelling, start, end);
 	fprintf(stderr, "Unrecognized token: %s\n                    ^\n", spelling);
 	exit(1);
+}
+
+/*
+ * Puts the specified input string into dest, terminating with NUL.
+ * REQUIRES: dest is allocated long enough. You know how long it will be, so pls.
+*/
+void getInputSubstr(char *dest, size_t startIndex, size_t endIndex)
+{
+	strncpy(dest, fullInput + startIndex, endIndex - startIndex);
+	dest[endIndex - startIndex] = '\0';
+}
+
+/*
+ * EFFECTS: produces true if the strings represented by given inputs are the same, and false otherwise.
+*/
+int compareInputSubstr(size_t start1, size_t end1, size_t start2, size_t end2)
+{
+	if (end1 - start1 != end2 - start2) return 0;
+	return strncmp(fullInput + start1, fullInput + start2, end1 - start1) == 0;
 }

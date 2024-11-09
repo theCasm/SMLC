@@ -187,7 +187,8 @@ static struct ASTLinkedNode *parseCommand()
 		acceptIt();
 		next = peek();
 	}
-	while (next->type == CONST || next->type == VAR || next->type == IF || next->type == WHILE || next->type == IDENTIFIER || next->type == TIMES) {
+	while (next->type == CONST || next->type == VAR || next->type == IF || next->type == WHILE || next->type == IDENTIFIER || next->type == TIMES
+			|| next->type == RETURN) {
 		if (child == NULL) {
 			child = parseSingleCommand();
 			ans->val.children = child;
@@ -208,6 +209,7 @@ static struct ASTLinkedNode *parseCommand()
  * singleCommand ::= const-decl | var-decl | if-expr
  *                 | while-loop | ('{' Command '}')
  *                 | identifier-command | indirect-assignment
+ * 				   | return Expr
  * 
 */
 struct ASTLinkedNode *parseSingleCommand()
@@ -236,9 +238,14 @@ struct ASTLinkedNode *parseSingleCommand()
 	case IDENTIFIER:
 		ans->val.children = parseIdentifierCommand();
 		return ans;
-		
 	case TIMES:
 		ans->val.children = parseIndirectAssignment();
+		return ans;
+	case RETURN:
+		// we are treating this different than every other command - return directives, simply put, *are* different.
+		acceptIt();
+		ans->val.type = RETURN_DIRECTIVE;
+		ans->val.children = parseExpr();
 		return ans;
 	default:
 		break;
@@ -310,6 +317,7 @@ static struct ASTLinkedNode *parseParamList()
 	struct Token *next = peek();
 	if (next->type == IDENTIFIER) {
 		child = handleIdentifier();
+		child->val.type = VAR_DECL;
 		ans->val.children = child;
 		next = peek();
 	}
@@ -317,6 +325,7 @@ static struct ASTLinkedNode *parseParamList()
 		accept(COMMA);
 		if (child == NULL) {
 			child = handleIdentifier();
+			child->val.type = VAR_DECL;
 			ans->val.children = child;
 		} else {
 			child->next = handleIdentifier();
@@ -569,8 +578,7 @@ static struct ASTLinkedNode *handleUnexpectedToken(struct Token *tok)
 {
 	// TODO: lexer function to turn start, end into string.
 	char *unexpectedTok = malloc(tok->end - tok->start + 1);
-	strncpy(unexpectedTok, fullInput + tok->start, tok->end - tok->start);
-	unexpectedTok[tok->end - tok->start] = '\0';
+	getInputSubstr(unexpectedTok, tok->start, tok->end);
 	fprintf(stderr, "Unexpected: `%s`\n", unexpectedTok);
 	free(unexpectedTok);
 

@@ -10,6 +10,7 @@ enum TokenType {
 	FUNC,
 	VOID,
 	NON_VOID,
+	RETURN,
 	IF,
 	ELSE,
 	WHILE,
@@ -53,6 +54,7 @@ static const char *TokenStrings[] = {
 	"func",
 	"void",
 	"non-void",
+	"return",
 	"if",
 	"else",
 	"while",
@@ -100,5 +102,7 @@ int isInfix(enum TokenType);
 struct Token *peek(void);
 void acceptIt(void);
 void accept(enum TokenType);
+void getInputSubstr(char *, size_t, size_t);
+int compareInputSubstr(size_t, size_t, size_t, size_t);
 
 #endif
