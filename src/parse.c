@@ -209,7 +209,7 @@ static struct ASTLinkedNode *parseCommand()
  * singleCommand ::= const-decl | var-decl | if-expr
  *                 | while-loop | ('{' Command '}')
  *                 | identifier-command | indirect-assignment
- * 				   | return Expr
+ * 				   | return Expr? EOL
  * 
 */
 struct ASTLinkedNode *parseSingleCommand()
@@ -245,7 +245,9 @@ struct ASTLinkedNode *parseSingleCommand()
 		// we are treating this different than every other command - return directives, simply put, *are* different.
 		acceptIt();
 		ans->val.type = RETURN_DIRECTIVE;
-		ans->val.children = parseExpr();
+		next = peek();
+		if (next->type != LINE_END) ans->val.children = parseExpr();
+		accept(LINE_END);
 		return ans;
 	default:
 		break;
@@ -283,7 +285,6 @@ static struct ASTLinkedNode *parseFunctionDecl()
 static struct ASTLinkedNode *parseArgList()
 {
 	struct ASTLinkedNode *child = NULL, *ans = newLinkedAstNode(ARG_LIST);
-	// im sorry for unused var clang - we will need it later though!
 	accept(LPAR);
 	struct Token *next = peek();
 	if (next->type != RPAR) {
@@ -329,6 +330,7 @@ static struct ASTLinkedNode *parseParamList()
 			ans->val.children = child;
 		} else {
 			child->next = handleIdentifier();
+			child->next->val.type = VAR_DECL;
 			child = child->next;
 		}
 		next = peek();
@@ -487,6 +489,7 @@ static struct ASTLinkedNode *parsePrimaryExpr()
 		int base = (spelling[1] == 'x') ? 16 : ((spelling[0] == '0') ? 8 : 10);
 		ans = newLinkedAstNode(NUMBER_LITERAL);
 		ans->val.val = strtol(spelling, NULL, base);
+		ans->val.isConstant = 1;
 		free(spelling);
 		acceptIt();
 		return ans;
