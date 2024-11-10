@@ -5,6 +5,7 @@ func void main(c) {
     a = a + b + c
     if a == 2 {
         var d = 5
+        a = a + d
     }
     var e = d + a
 }

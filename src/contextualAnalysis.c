@@ -32,7 +32,7 @@
 #include "AST.h"
 #include "lex.h"
 
-static struct definition {
+struct definition {
 	size_t startIndex;
 	size_t endIndex; 
 	struct ASTLinkedNode *def;
@@ -42,47 +42,52 @@ static struct definition *defStack = NULL;
 static size_t defIndex = 0;
 static size_t defCap = 0;
 
-static void pushDef(size_t start, size_t end, struct ASTLinkedNode *def)
+static void initDefStack();
+static void pushDef(size_t start, size_t end, struct ASTLinkedNode *def);
+static void popDef();
+static void *searchForDef(size_t identifierStart, size_t identifierEnd);
+static void pass1(struct AST *tree);
+static void pass2(struct ASTLinkedNode *curr);
+
+/*
+ * EFFECTS: invokes analysis functions in order to do complete analysis of given AST. 
+ */
+struct AST *analyze(struct AST *ast)
 {
-	if (defCap == 0) {
-		defCap = 4;
-		defIndex = 0;
-		defStack = calloc(4, sizeof(*defStack));
-	} else if (defIndex >= defCap) {
-		defCap *= 2;
-		if (!(defStack = realloc(defStack, sizeof(*defStack) * defCap))) {
-			exit(1);
-		}
-	}
-	defStack[defIndex].startIndex = start;
-	defStack[defIndex].endIndex = end;
-	defStack[defIndex].def = def;
-	++defIndex;
+	// TODO: 2 pass context analysis - pass 1 for global decls, pass 2 for everything else
+	// - will allow globals (notably functions) to be defined lower than their first use
+	initDefStack();
+	pass1(ast);
+	pass2(ast->root);
+	return ast;
 }
 
-static void popDef()
+/*
+ * REQUIRES: initDefStack been called.
+ * EFFECTS: finds global function definitions and adds them to stack so they can be found later
+*/
+static void pass1(struct AST *tree)
 {
-	defIndex--;
-	if (defIndex * 2 < defCap) {
-		defCap /= 2;
-		if (!(defStack = realloc(defStack, sizeof(*defStack) * defCap))) {
-			exit(1);
+	struct ASTLinkedNode *child, *globaldec, *root = tree->root;
+	struct ASTLinkedNode *ident;
+	for (globaldec = root->val.children; globaldec != NULL; globaldec = globaldec->next) {
+		child = globaldec->val.children;
+		if (child->val.type == FN_DECL) {
+			ident = child->val.children;
+			pushDef(ident->val.startIndex, ident->val.endIndex, child);
 		}
 	}
 }
 
-static void *searchForDef(size_t identifierStart, size_t identifierEnd)
-{
-	if (defIndex == 0) return NULL;
-	for (size_t i = defIndex; i > 0; i--) {
-		if (compareInputSubstr(identifierStart, identifierEnd, defStack[i - 1].startIndex, defStack[i - 1].endIndex)) {
-			return defStack[i - 1].def;
-		}
-	}
-	return NULL;
-}
-
-static void analyzeNext(struct ASTLinkedNode *curr)
+/*
+ * REQUIRES: initDefStack called, pass1 called
+ * EFFECTS: does main part of context analysis by verifying:
+ *  - constant variable values are statically known
+ *  - variable references have a valid, in scope definition
+ *  - function calls refer to defined function and use proper argument count
+ * Finally, this function links references to their definition in the AST.
+*/
+static void pass2(struct ASTLinkedNode *curr)
 {
 	if (curr == NULL) return;
 
@@ -97,13 +102,12 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 		ident = curr->val.children;
 		params = ident->next;
 		singleCommand = params->next;
-		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
 		for (child = params->val.children; child != NULL; child = child->next) {
 			name = malloc(child->val.endIndex - child->val.startIndex + 1);
 			getInputSubstr(name, child->val.startIndex, child->val.endIndex);
 			pushDef(child->val.startIndex, child->val.endIndex, params);
 		}
-		analyzeNext(singleCommand);
+		pass2(singleCommand);
 		for (child = params->val.children; child != NULL; child = child->next) {
 			popDef();
 		}
@@ -112,7 +116,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 	case CONST_DECL:
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
-		analyzeNext(ident->next);
+		pass2(ident->next);
 		if (!ident->next->val.isConstant) {
 			name = calloc(curr->val.children->val.endIndex - curr->val.children->val.startIndex + 1, sizeof(*name));
 			getInputSubstr(name, curr->val.children->val.startIndex, curr->val.children->val.endIndex);
@@ -124,7 +128,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 	case VAR_DECL:
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
-		if (ident->next) analyzeNext(ident->next);
+		if (ident->next) pass2(ident->next);
 		break;
 	case IDENT_REF:
 		curr->val.definition = searchForDef(curr->val.startIndex, curr->val.endIndex);
@@ -151,7 +155,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 				fputs("Too many args\n", stderr);
 				break;
 			}
-			analyzeNext(child);
+			pass2(child);
 		}
 		if (temp != NULL) {
 			fputs("Too few args\n", stderr);
@@ -159,7 +163,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 		break;
 	case CONST_EXPR:
 		for (child = curr->val.children; child != NULL; child = child->next) {
-			analyzeNext(child);
+			pass2(child);
 			if (!child->val.isConstant) {
 				fputs("Constant expr is not constant", stderr);
 				exit(1);
@@ -170,7 +174,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 	case EXPR:
 		curr->val.isConstant = 1;
 		for (child = curr->val.children; child != NULL; child = child->next) {
-			analyzeNext(child);
+			pass2(child);
 			if (!child->val.isConstant) {
 				curr->val.isConstant = 0;
 			}
@@ -179,7 +183,7 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 	case COMMAND:
 		startDefIndex = defIndex;
 		for (child = curr->val.children; child != NULL; child = child->next) {
-			analyzeNext(child);
+			pass2(child);
 			// TODO: ensure that return is last part of command, warning otherwise
 		}
 		while(defIndex > startDefIndex) {
@@ -189,16 +193,67 @@ static void analyzeNext(struct ASTLinkedNode *curr)
 	case RETURN_DIRECTIVE: //TODO: ensure is in function when this is found
 	default:
 		for (child = curr->val.children; child != NULL; child = child->next) {
-			analyzeNext(child);
+			pass2(child);
 		}
 		return;
 	}
 }
 
-struct AST *analyze(struct AST *ast)
+/*
+ * REQUIRES: initDefStack has not yet been called
+ * EFFECTS: initializes definition stack
+*/
+static void initDefStack()
 {
-	// TODO: 2 pass context analysis - pass 1 for global decls, pass 2 for everything else
-	// - will allow globals (notably functions) to be defined lower than their first use
-	analyzeNext(ast->root);
-	return ast;
+	defCap = 4;
+	defIndex = 0;
+	defStack = calloc(4, sizeof(*defStack));
+}
+
+/*
+ * REQUIRES: initDefStack has been called
+ * EFFECTS: pushes definition with given characteristics to stack
+*/
+static void pushDef(size_t start, size_t end, struct ASTLinkedNode *def)
+{
+	if (defIndex >= defCap) {
+		defCap *= 2;
+		if (!(defStack = realloc(defStack, sizeof(*defStack) * defCap))) {
+			exit(1);
+		}
+	}
+	defStack[defIndex].startIndex = start;
+	defStack[defIndex].endIndex = end;
+	defStack[defIndex].def = def;
+	++defIndex;
+}
+
+/*
+ * REQUIRES: initStackDef previously called, definition exists on stack.
+ * EFFECTS: Removes last added definition from stack
+*/
+static void popDef()
+{
+	defIndex--;
+	if (defIndex * 2 < defCap) {
+		defCap /= 2;
+		if (!(defStack = realloc(defStack, sizeof(*defStack) * defCap))) {
+			exit(1);
+		}
+	}
+}
+
+/*
+ * REQUIRES: initDefStack been called
+ * EFFECTS: produces pointer to identifier definition AST node if it is on stack, or null otherwise.
+*/
+static void *searchForDef(size_t identifierStart, size_t identifierEnd)
+{
+	if (defIndex == 0) return NULL;
+	for (size_t i = defIndex; i > 0; i--) {
+		if (compareInputSubstr(identifierStart, identifierEnd, defStack[i - 1].startIndex, defStack[i - 1].endIndex)) {
+			return defStack[i - 1].def;
+		}
+	}
+	return NULL;
 }

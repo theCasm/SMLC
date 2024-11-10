@@ -24,7 +24,6 @@
 
 int main(void)
 {
-	printf("> ");
 	struct Token *next;
 	struct AST *expr;
 	while ((next = peek())->type != TOKEN_EOF) {
@@ -34,6 +33,5 @@ int main(void)
 		printTree(expr);
 		freeTree(expr);
 		putchar('\n');
-		printf("> ");
 	}
 }
