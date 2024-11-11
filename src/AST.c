@@ -16,6 +16,7 @@
  * SMLC. If not, see <https://www.gnu.org/licenses/>. 
 */
 #include "AST.h"
+#include "lex.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,21 @@ void printTree(struct AST *tree)
     printTreeHelper(tree->root, 0);
 }
 
+static void printNode(struct ASTLinkedNode *node)
+{
+    if (node->val.type == VAR_DECL) {
+        printf("%p ", node);
+        if (node->val.isStatic) printf("static ");
+        if (node->val.isConstant) printf("const ");
+        printf("depth=%d ", node->val.frameDepth);
+    } else if (node->val.type == IDENT_REF) {
+        printf("def=%p ", node->val.definition);
+    } else if (node->val.type == EXPR) {
+        printf("type=`%s` ", TokenStrings[node->val.operationType]);
+    }
+    printf("%s", NODE_TYPE_STRINGS[node->val.type]);
+}
+
 // TODO: print context decorations, if they exist.
 static void printTreeHelper(struct ASTLinkedNode *curr, int tabs)
 {
@@ -35,7 +51,7 @@ static void printTreeHelper(struct ASTLinkedNode *curr, int tabs)
         return;
     }
     for (int i = 0; i < tabs; i++) printf("\t");
-    printf("%s", NODE_TYPE_STRINGS[curr->val.type]);
+    printNode(curr);
     struct ASTLinkedNode *c = curr->val.children;
     if (c != NULL) {
         printf("->{\n");
