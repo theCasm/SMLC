@@ -14,6 +14,11 @@
  * 
  * You should have received a copy of the GNU General Public License along with
  * SMLC. If not, see <https://www.gnu.org/licenses/>. 
+ * 
+ * 
+ * The parser is responsbile for everything syntax. This includes:
+ *  - building the AST
+ *  - Assigning isStatic when necessary
 */
 #include "lex.h"
 #include "parse.h"
@@ -24,14 +29,6 @@
 #include <string.h>
 
 #define MAX_P 10
-
-
-/*
- * For now, identifiers are ignored and treated like unimportant terminals. In the future,
- * we will need to treat them similarily to numbers, in that they are a terminal that needs to
- * be parsed further. This is why some of the 'accept(IDENTIFIERS)' are structured in the way that they
- * are.
-*/
 
 extern char *fullInput;
 
@@ -169,6 +166,7 @@ static struct ASTLinkedNode *parseGlobalDecl()
 		return ans;
 	case VAR:
 		ans->val.children = parseVarDecl();
+		ans->val.children->val.isStatic = 1;
 		return ans;
 	default:
 		// TODO: way better error. this makes no sense when u see it

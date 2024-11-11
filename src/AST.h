@@ -16,7 +16,6 @@ enum NodeType {
     INDIRECT_ASSIGN,
     IDENT_REF,
     FUNC_CALL,
-    CONST_EXPR,
     EXPR,
     COMMAND,
     SINGLE_COMMAND,
@@ -38,7 +37,6 @@ static const char *NODE_TYPE_STRINGS[] = {
     "indirect assignment",
     "identifier reference",
     "function call",
-    "constant expression",
     "expression",
     "command block",
     "single command",
@@ -57,8 +55,8 @@ struct ASTNode {
     union {
         struct {
             // for variables
-            size_t birth;
-            size_t death;
+            int isStatic;
+            int frameDepth;
         };
         enum TokenType operationType; // for expressions
         int val; // for constants

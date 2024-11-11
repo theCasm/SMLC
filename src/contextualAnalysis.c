@@ -15,11 +15,15 @@
  * You should have received a copy of the GNU General Public License along with
  * SMLC. If not, see <https://www.gnu.org/licenses/>. 
  * 
- * The role of the contextual analyzer, for our purposes, is:
- *  - confirm constant declarations are actually static
- *  - ensure identifier references actually exist / are in scope
- *  - verify that correct number of arguments are used in function calls
- *  - link up identifier references to their respective definition
+ * The role of the contextual analyzer, for our purposes, is to verify:
+ *  - constant expressions have static values
+ *  - identifier references actually exist / are in scope
+ *  - correct number of arguments are used in function calls
+ * 
+ * And to assign:
+ *  - ref pointers to their respective definition
+ *  - frame depth
+ *  - isConstant
  * 
  * The typeless nature of SML means we don't really have that much to check.
 */
@@ -41,6 +45,7 @@ struct definition {
 static struct definition *defStack = NULL;
 static size_t defIndex = 0;
 static size_t defCap = 0;
+static int frameDepth = 0;
 
 static void initDefStack();
 static void pushDef(size_t start, size_t end, struct ASTLinkedNode *def);
@@ -85,7 +90,9 @@ static void pass1(struct AST *tree)
  *  - constant variable values are statically known
  *  - variable references have a valid, in scope definition
  *  - function calls refer to defined function and use proper argument count
- * Finally, this function links references to their definition in the AST.
+ * 
+ * Finally, this function links references to their definition in the AST, and decorates definitions with:
+ *  - stack frame depth
 */
 static void pass2(struct ASTLinkedNode *curr)
 {
@@ -95,6 +102,7 @@ static void pass2(struct ASTLinkedNode *curr)
 	struct ASTLinkedNode *ident;
 	struct ASTLinkedNode *params;
 	struct ASTLinkedNode *singleCommand;
+	int index;
 	size_t startDefIndex;
 	char *name = NULL;
 	switch (curr->val.type) {
@@ -102,12 +110,14 @@ static void pass2(struct ASTLinkedNode *curr)
 		ident = curr->val.children;
 		params = ident->next;
 		singleCommand = params->next;
-		for (child = params->val.children; child != NULL; child = child->next) {
+		for (index = 0, child = params->val.children; child != NULL; child = child->next, index++) {
 			name = malloc(child->val.endIndex - child->val.startIndex + 1);
 			getInputSubstr(name, child->val.startIndex, child->val.endIndex);
-			pushDef(child->val.startIndex, child->val.endIndex, params);
+			pushDef(child->val.startIndex, child->val.endIndex, child);
 		}
+		frameDepth++;
 		pass2(singleCommand);
+		frameDepth--;
 		for (child = params->val.children; child != NULL; child = child->next) {
 			popDef();
 		}
@@ -123,11 +133,11 @@ static void pass2(struct ASTLinkedNode *curr)
 			fprintf(stderr, "Constant values must be statically known, but `%s` is defined to non-statically known expression.\n", name);
 			exit(1);
 		}
-		// TODO: compile-time evaluate this expression, and set curr->val appropriately
 		break;
 	case VAR_DECL:
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
+		ident->val.frameDepth = frameDepth;
 		if (ident->next) pass2(ident->next);
 		break;
 	case IDENT_REF:
@@ -160,16 +170,6 @@ static void pass2(struct ASTLinkedNode *curr)
 		if (temp != NULL) {
 			fputs("Too few args\n", stderr);
 		}
-		break;
-	case CONST_EXPR:
-		for (child = curr->val.children; child != NULL; child = child->next) {
-			pass2(child);
-			if (!child->val.isConstant) {
-				fputs("Constant expr is not constant", stderr);
-				exit(1);
-			}
-		}
-		curr->val.isConstant = 1;
 		break;
 	case EXPR:
 		curr->val.isConstant = 1;
