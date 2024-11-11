@@ -57,6 +57,7 @@ struct ASTNode {
             // for variables
             int isStatic;
             int frameDepth;
+            int frameIndex;
         };
         enum TokenType operationType; // for expressions
         int val; // for constants

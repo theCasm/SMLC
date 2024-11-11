@@ -23,6 +23,7 @@
  * And to assign:
  *  - ref pointers to their respective definition
  *  - frame depth
+ *  - frame index
  *  - isConstant
  * 
  * The typeless nature of SML means we don't really have that much to check.
@@ -46,6 +47,7 @@ static struct definition *defStack = NULL;
 static size_t defIndex = 0;
 static size_t defCap = 0;
 static int frameDepth = 0;
+static int frameIndex = 0;
 
 static void initDefStack();
 static void pushDef(size_t start, size_t end, struct ASTLinkedNode *def);
@@ -102,7 +104,7 @@ static void pass2(struct ASTLinkedNode *curr)
 	struct ASTLinkedNode *ident;
 	struct ASTLinkedNode *params;
 	struct ASTLinkedNode *singleCommand;
-	int index;
+	int oldIndex;
 	size_t startDefIndex;
 	char *name = NULL;
 	switch (curr->val.type) {
@@ -110,14 +112,18 @@ static void pass2(struct ASTLinkedNode *curr)
 		ident = curr->val.children;
 		params = ident->next;
 		singleCommand = params->next;
-		for (index = 0, child = params->val.children; child != NULL; child = child->next, index++) {
+		frameDepth++;
+		oldIndex = frameIndex;
+		for (frameIndex = 0, child = params->val.children; child != NULL; child = child->next, frameIndex++) {
 			name = malloc(child->val.endIndex - child->val.startIndex + 1);
 			getInputSubstr(name, child->val.startIndex, child->val.endIndex);
 			pushDef(child->val.startIndex, child->val.endIndex, child);
+			child->val.frameDepth = frameDepth;
+			child->val.frameIndex = frameIndex;
 		}
-		frameDepth++;
 		pass2(singleCommand);
 		frameDepth--;
+		frameIndex = oldIndex;
 		for (child = params->val.children; child != NULL; child = child->next) {
 			popDef();
 		}
@@ -137,7 +143,8 @@ static void pass2(struct ASTLinkedNode *curr)
 	case VAR_DECL:
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
-		ident->val.frameDepth = frameDepth;
+		curr->val.frameDepth = frameDepth;
+		curr->val.frameIndex = frameIndex++;
 		if (ident->next) pass2(ident->next);
 		break;
 	case IDENT_REF:

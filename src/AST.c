@@ -36,10 +36,13 @@ static void printNode(struct ASTLinkedNode *node)
         if (node->val.isStatic) printf("static ");
         if (node->val.isConstant) printf("const ");
         printf("depth=%d ", node->val.frameDepth);
+        printf("index=%d ", node->val.frameIndex);
     } else if (node->val.type == IDENT_REF) {
         printf("def=%p ", node->val.definition);
     } else if (node->val.type == EXPR) {
         printf("type=`%s` ", TokenStrings[node->val.operationType]);
+    } else if (node->val.type == NUMBER_LITERAL) {
+        printf("val=`%d` ", node->val.val);
     }
     printf("%s", NODE_TYPE_STRINGS[node->val.type]);
 }
