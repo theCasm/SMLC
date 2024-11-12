@@ -54,17 +54,18 @@ struct ASTNode {
     size_t endIndex;
     union {
         struct {
-            // for variables
+            // for variable declarations
             int isStatic;
-            int frameDepth;
             int frameIndex;
         };
         enum TokenType operationType; // for expressions
         int val; // for constants
         struct {
             int isVoid; // for functions
-            struct ASTLinkedNode *definition; // for references
+            int frameVars; // for functions
+            int paramCount; // for functions
         };
+        struct ASTLinkedNode *definition; // for references
     };
 };
 

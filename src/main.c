@@ -19,6 +19,7 @@
 #include "lex.h"
 #include "AST.h"
 #include "contextualAnalysis.h"
+#include "codegen.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -28,8 +29,8 @@ int main(void)
 	struct AST *expr;
 	while ((next = peek())->type != TOKEN_EOF) {
 		fflush(stdout);
-		//printf("%d\n", parseExpr());
 		expr = analyze(parse());
+		generateCode(expr);
 		printTree(expr);
 		freeTree(expr);
 		putchar('\n');

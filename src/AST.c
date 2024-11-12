@@ -17,6 +17,7 @@
 */
 #include "AST.h"
 #include "lex.h"
+#include "codegen.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +36,6 @@ static void printNode(struct ASTLinkedNode *node)
         printf("%p ", node);
         if (node->val.isStatic) printf("static ");
         if (node->val.isConstant) printf("const ");
-        printf("depth=%d ", node->val.frameDepth);
         printf("index=%d ", node->val.frameIndex);
     } else if (node->val.type == IDENT_REF) {
         printf("def=%p ", node->val.definition);

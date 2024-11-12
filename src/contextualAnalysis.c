@@ -22,7 +22,6 @@
  * 
  * And to assign:
  *  - ref pointers to their respective definition
- *  - frame depth
  *  - frame index
  *  - isConstant
  * 
@@ -46,7 +45,6 @@ struct definition {
 static struct definition *defStack = NULL;
 static size_t defIndex = 0;
 static size_t defCap = 0;
-static int frameDepth = 0;
 static int frameIndex = 0;
 
 static void initDefStack();
@@ -75,6 +73,7 @@ struct AST *analyze(struct AST *ast)
 */
 static void pass1(struct AST *tree)
 {
+	// TODO: ensure function names are unique
 	struct ASTLinkedNode *child, *globaldec, *root = tree->root;
 	struct ASTLinkedNode *ident;
 	for (globaldec = root->val.children; globaldec != NULL; globaldec = globaldec->next) {
@@ -95,6 +94,9 @@ static void pass1(struct AST *tree)
  * 
  * Finally, this function links references to their definition in the AST, and decorates definitions with:
  *  - stack frame depth
+ *  - stack frame index
+ *  - frameVars of fn
+ *  - paramCount of fn
 */
 static void pass2(struct ASTLinkedNode *curr)
 {
@@ -109,27 +111,30 @@ static void pass2(struct ASTLinkedNode *curr)
 	char *name = NULL;
 	switch (curr->val.type) {
 	case FN_DECL:
+		// TODO: set pointer to string of identifier
 		ident = curr->val.children;
 		params = ident->next;
 		singleCommand = params->next;
-		frameDepth++;
 		oldIndex = frameIndex;
 		for (frameIndex = 0, child = params->val.children; child != NULL; child = child->next, frameIndex++) {
 			name = malloc(child->val.endIndex - child->val.startIndex + 1);
 			getInputSubstr(name, child->val.startIndex, child->val.endIndex);
 			pushDef(child->val.startIndex, child->val.endIndex, child);
-			child->val.frameDepth = frameDepth;
 			child->val.frameIndex = frameIndex;
 		}
+		curr->val.paramCount = frameIndex;
 		pass2(singleCommand);
-		frameDepth--;
+		curr->val.frameVars = frameIndex;
 		frameIndex = oldIndex;
 		for (child = params->val.children; child != NULL; child = child->next) {
 			popDef();
 		}
-		// TODO: ensure non-void fn returns
+		// TODO: ensure ALL functions return. Otherwise it WILL compile and it WILL be weird.
+		// TODO: maybe insert a return statement in void functions at the end
 		break;
 	case CONST_DECL:
+		// TODO: set pointer to string of identifier
+		// TODO: ensure const names are unique
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
 		pass2(ident->next);
@@ -141,9 +146,10 @@ static void pass2(struct ASTLinkedNode *curr)
 		}
 		break;
 	case VAR_DECL:
+		// TODO: set pointer to string of identifier
+		// TODO: ensure var names are unique
 		ident = curr->val.children;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
-		curr->val.frameDepth = frameDepth;
 		curr->val.frameIndex = frameIndex++;
 		if (ident->next) pass2(ident->next);
 		break;
@@ -197,7 +203,10 @@ static void pass2(struct ASTLinkedNode *curr)
 			popDef();
 		}
 		break;
-	case RETURN_DIRECTIVE: //TODO: ensure is in function when this is found
+	case RETURN_DIRECTIVE: 
+		//TODO: ensure is in function when this is found
+		//TODO: if not last statement in function, throw warning and trim tree to remove everything after.
+		//  -> We probably won't do that here - maybe global flag when in function and check for return in command cases?
 	default:
 		for (child = curr->val.children; child != NULL; child = child->next) {
 			pass2(child);
