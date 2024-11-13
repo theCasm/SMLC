@@ -20,5 +20,12 @@ read the EBNF formal specification scattered in comments throughout the compiler
 # SMLC
 
 SMLC is meant to be a compiler for SML. As of now, it can parse the language and it's syntax
-error messages are even helpful sometimes. I predict that this project will continue to develop
-well until the horrors of code generation swallow it whole.
+error messages are even helpful sometimes. Its functionality includes:
+- basic syntax errors
+- contextual analysis that will occasionaly catch mistakes
+- code generation that does a memory access for every single variable access
+- if statements and loops that only work if they are short enough, otherwise the offset is too big 
+for the br, beq, bgt instructions to fit (and code is 90% longer bcs the memory access thing lol)
+- around half of the available infix notation expressions are implemented (the others default to adding)
+  
+# oh god oh fuck please contribute theres so much
