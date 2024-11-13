@@ -27,5 +27,11 @@ error messages are even helpful sometimes. Its functionality includes:
 - if statements and loops that only work if they are short enough, otherwise the offset is too big 
 for the br, beq, bgt instructions to fit (and code is 90% longer bcs the memory access thing lol)
 - around half of the available infix notation expressions are implemented (the others default to adding)
-  
-# oh god oh fuck please contribute theres so much
+
+## Usage:
+1. Download the code
+2. In a terminal in the codes folder, run `make`. You might want to edit the Makefile if you don't use clang as your compiler.
+
+Now you can run SMLC! The recommended way to do this is to write your SML in a file first.  
+Then, run `./build/smlc < ./path/to/file.txt` (replacing ./path/to/file.txt with the actual path to your file). This will output the assembly to the screen. To write the output to a file, use
+`./build/smlc < ./path/to/file.txt > ./path/to/output.s`, which will write the output to `./path/to/output.s`.
