@@ -34,4 +34,10 @@ for the br, beq, bgt instructions to fit (and code is 90% longer bcs the memory 
 
 Now you can run SMLC! The recommended way to do this is to write your SML in a file first.  
 Then, run `./build/smlc < ./path/to/file.txt` (replacing ./path/to/file.txt with the actual path to your file). This will output the assembly to the screen. To write the output to a file, use
-`./build/smlc < ./path/to/file.txt > ./path/to/output.s`, which will write the output to `./path/to/output.s`.
+`./build/smlc < ./path/to/file.txt > ./path/to/output.s`, which will write the output to `./path/to/output.s`.  
+
+For example, to compile the test program `./testPrograms/valid/testFullProgram.txt` (which is the SML equivilant of a solution to Assignment 6 Q5) and save the output as q3.s, you would run  
+`./build/smlc < ./testPrograms/valid/testFullProgram.txt > q3.s`  
+Feel free to run q3.s in the simulator! Its a lot easier than writing all the assembly by hand.  
+Note that as this is being written, the current version of SMLC can only barely compile testFullProgram.  
+Some similar programs may not behave as expected, though this should be fixed soon. Feel free to experiment!
