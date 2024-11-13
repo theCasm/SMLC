@@ -42,8 +42,12 @@ static void codegenWhileLoop(struct ASTLinkedNode *loop);
 static void codegenIf(struct ASTLinkedNode *ifExpr);
 static void codegenDirectAssign(struct ASTLinkedNode *assignment);
 static void codegenExpr(struct ASTLinkedNode *expr, int regDest);
-static void codegenOperation(enum TokenType type, int regArg, int regDest);
-static void codegenPrefixOperation(enum TokenType type, int reg);
+static void codegenInfixOperation(struct ASTLinkedNode *expr, int regDest);
+static void codegenPrefixOperation(struct ASTLinkedNode *expr, int reg);
+static void codegenMinus(int left, int right);
+static void codegenNotEquals(int left, int right);
+static void codegenOr(int left, int right);
+static void codegenAnd(int left, int right);
 static void codegenDynamicMultiplication(int left, int right);
 
 static char startAsm[] = ".pos 0x1000\n"
@@ -349,51 +353,48 @@ static void codegenExpr(struct ASTLinkedNode *expr, int regDest)
         }
     }
 
-    int left = regDest;
-    int right = regDest + 1;
     if (isInfix(expr->val.operationType)) {
-        if (regDest >= 4) {
-            codegenExpr(expr->val.children, left);
-            fprintf(stdout, "deca r5\nst r%d (r5)\n", left);
-            entireFrameOffset += 4;
+        codegenInfixOperation(expr, regDest);
+        /*if (regDest >= 4) {
+
             codegenExpr(expr->val.children->next, left);
             fprintf(stdout, "mov r%d, r7\n", left);
             fprintf(stdout, "ld (r5), r%d\ninca r5\n", left);
             entireFrameOffset -= 4;
-            codegenOperation(expr->val.operationType, left, 7);
+            codegenInfixOperation(expr->val.operationType, left, 7);
             return;
         }
         codegenExpr(expr->val.children, left);
         codegenExpr(expr->val.children->next, right);
-        codegenOperation(expr->val.operationType, left, right);
+        codegenInfixOperation(expr->val.operationType, left, right);*/
         return;
     }
-    codegenExpr(expr->val.children, left);
-    codegenPrefixOperation(expr->val.operationType, left);
+    codegenPrefixOperation(expr, regDest);
 }
 
 /*
- * calculates operation on reg
+ * generates code to compute prefix operation
 */
-static void codegenPrefixOperation(enum TokenType type, int reg)
+static void codegenPrefixOperation(struct ASTLinkedNode *expr, int destReg)
 {
-    switch (type) {
+    codegenExpr(expr->val.children, destReg);
+    switch (expr->val.operationType) {
     case MINUS:
-        fprintf(stdout, "not r%d\ninc r%d\n", reg, reg);
+        fprintf(stdout, "not r%d\ninc r%d\n", destReg, destReg);
         return;
     case BITWISE_NOT:
-        fprintf(stdout, "not r%d\n", reg);
+        fprintf(stdout, "not r%d\n", destReg);
         return;
     case NOT:
         fprintf(stdout, "beq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            reg, uniqueNum, reg, uniqueNum, uniqueNum, reg, uniqueNum);
+            destReg, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
         return;
     case DEREF:
-        fprintf(stdout, "ld (r%d), r%d\n", reg, reg);
+        fprintf(stdout, "ld (r%d), r%d\n", destReg, destReg);
         return;
     default:
-        fprintf(stderr, "CODEGEN: idk how to fold in prefix %s\n", TokenStrings[type]);
+        fprintf(stderr, "CODEGEN: idk how to fold in prefix %s\n", TokenStrings[expr->val.type]);
 		return;
     }
 }
@@ -401,100 +402,156 @@ static void codegenPrefixOperation(enum TokenType type, int reg)
 /*
  * Computes operation and stores in left.
  * CLOBBERS *BOTH* left and right.
- * TODO: handle operation w/ one of left, right an integer literal in different function
 */
-static void codegenOperation(enum TokenType type, int left, int right)
+static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
 {
-    switch (type) {
+    // TODO: handle operation w/ one of left, right an integer literal in different function
+    int right = destReg + 1;
+    codegenExpr(expr->val.children, destReg);
+    if (destReg >= 4) {
+        fprintf(stdout, "deca r5\nst r%d (r5)\n", destReg);
+        entireFrameOffset += 4;
+        codegenExpr(expr->val.children->next, destReg);
+        fprintf(stdout, "mov r%d, r7\n", destReg);
+        fprintf(stdout, "ld (r5), r%d\ninca r5\n", destReg);
+        entireFrameOffset -= 4;
+        right = 7;
+    } else {
+		codegenExpr(expr->val.children->next, right);
+	}
+    switch (expr->val.operationType) {
 	case PLUS:
-        fprintf(stdout, "add r%d, r%d\n", right, left);
+        fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case MINUS:
-		fprintf(stdout, "not r%d\ninc r%d\nadd r%d, r%d\n", right, right, right, left);
+		codegenMinus(destReg, right);
 		return;
 	case TIMES:
-        codegenDynamicMultiplication(left, right);
+        codegenDynamicMultiplication(destReg, right);
 		return;
 	case DIVIDE:
         // TODO: not too important right now.
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case MODULO:
         // TODO: not too important right now.
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case LEFT_SHIFT:
         // TODO: we assume right is at most 32. Otherwise, this is equivilant to only looking at rightmost 5 bit.
         // TODO:
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case RIGHT_SHIFT:
         // we assume right is at most 32. Otherwise, this is equivilant to only looking at rightmost 5 bit.
         // TODO:
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case LESS_THAN:
-        codegenOperation(MINUS, right, left);
+        codegenMinus(destReg, right);
         fprintf(stdout, "bgt r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+            right, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
         return;
 	case LESS_THAN_EQUALS:
-        codegenOperation(MINUS, right, left);
+        codegenMinus(destReg, right);
         fprintf(stdout, "bgt r%d, C%dS\nbe r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            right, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+            right, uniqueNum, right, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
         return;
 	case GREATER_THAN:
-        codegenOperation(MINUS, left, right);
+        codegenMinus(destReg, right);
         fprintf(stdout, "bgt r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+            destReg, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
         return;
 	case GREATER_THAN_EQUALS:
-        codegenOperation(MINUS, left, right);
+        codegenMinus(destReg, right);
         fprintf(stdout, "bgt r%d, C%dS\nbe r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            left, uniqueNum, left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+            destReg, uniqueNum, destReg, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
         return;
 	case EQUALS:
-        codegenOperation(MINUS, left, right);
+        codegenMinus(destReg, right);
 		fprintf(stdout, "beq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
-            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+            destReg, uniqueNum, destReg, uniqueNum, uniqueNum, destReg, uniqueNum);
         uniqueNum++;
 		return;
 	case NOT_EQUALS:
-        codegenOperation(MINUS, left, right);
-		fprintf(stdout, "beq r%d, C%dS\nld $1, r%d\nbr C%dE\nC%dS: ld $0, r%d\nC%dE:\n",
-            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
-        uniqueNum++;
+        codegenNotEquals(destReg, right);
 		return;
 	case OR:
-        fprintf(stdout, "beq r%d, C%dS\nbeq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS:ld $1, r%d\nC%dE:\n",
-            left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
-        uniqueNum++;
+        codegenOr(destReg, right);
+        
 		return;
 	case AND:
-        fprintf(stdout, "beq r%d, C%dS\nbeq r%d, C%dS\nld $1, r%d\nbr C%dE\nC%dS:\nld $0, r%d\nC%dE:\n",
-            left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
-        uniqueNum++;
+        codegenAnd(destReg, right);
 		return;
 	case BITWISE_AND:
         // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case BITWISE_OR:
         // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case BITWISE_XOR:
         // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+		fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	default:
-		fprintf(stderr, "CODEGEN: idk how to fold in %s\n", TokenStrings[type]);
+		fprintf(stderr, "CODEGEN: idk how to fold in %s\n", TokenStrings[expr->val.type]);
 		return;
 	}
+}
+
+static void codegenMinus(int left, int right)
+{
+    fprintf(stdout, 
+        "not r%d\n\
+        inc r%d\n\
+        add r%d, r%d\n\
+        ", right, right, right, left);
+}
+
+static void codegenNotEquals(int left, int right)
+{
+    codegenMinus(left, right);
+    fprintf(stdout,
+        "beq r%d, C%dS\n\
+        ld $1, r%d\n\
+        br C%dE\n\
+        C%dS: ld $0, r%d\n\
+        C%dE:\
+        ", left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+    uniqueNum++;
+}
+
+static void codegenOr(int left, int right)
+{
+    fprintf(stdout,
+        "beq r%d, C%dS\
+        beq r%d, C%dS\
+        ld $0, r%d\
+        br C%dE\
+        C%dS:ld $1, r%d\
+        C%dE:\
+        ", left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+    uniqueNum++;
+}
+
+static void codegenAnd(int left, int right)
+{
+    fprintf(stdout,
+        "beq r%d, C%dS\n\
+        beq r%d, C%dS\n\
+        ld $1, r%d\n\
+        br C%dE\n\
+        C%dS:\n\
+        ld $0, r%d\n\
+        C%dE:\n\
+        ", left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+    uniqueNum++;
 }
 
 /*
