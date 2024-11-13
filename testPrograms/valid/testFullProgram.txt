@@ -5,7 +5,7 @@ var s
 func void main() {
     calcAverages(s, n)
     insertSort(s, n)
-    m = *(s + (n << 1))
+    m = *(s + 24*(n >> 1))
 }
 
 func void calcAverages(s, n) {
@@ -31,6 +31,7 @@ func void insertSort(s, n) {
             swap(b + 20, b - 4)
             j = j - 1
         }
+        i = i + 1
     }
 }
 

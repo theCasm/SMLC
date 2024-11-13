@@ -38,6 +38,9 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl);
 static void codegenSingleCommand(struct ASTLinkedNode *command);
 static void codegenFuncCall(struct ASTLinkedNode *call, int regDest);
 static void codegenIdentRef(struct ASTLinkedNode *varref, int regDest);
+static void codegenWhileLoop(struct ASTLinkedNode *loop);
+static void codegenIf(struct ASTLinkedNode *ifExpr);
+static void codegenDirectAssign(struct ASTLinkedNode *assignment);
 static void codegenExpr(struct ASTLinkedNode *expr, int regDest);
 static void codegenOperation(enum TokenType type, int regArg, int regDest);
 static void codegenPrefixOperation(enum TokenType type, int reg);
@@ -170,7 +173,7 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         return;
     }
     struct ASTLinkedNode *temp, *child = command->val.children;
-    int number, offset;
+    int offset;
     switch(child->val.type) {
 
     case CONST_DECL:
@@ -185,27 +188,10 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         fprintf(stdout, "st r0, %d(r5)\n", offset + entireFrameOffset);
         return;
     case IF_EXPR:
-        codegenExpr(child->val.children, 0);
-        number = uniqueNum++;
-        fprintf(stdout, "beq r0, ELSE%dS\n", number);
-        codegenSingleCommand(child->val.children->next);
-        if (child->val.children->next->next) {
-            fprintf(stdout, "br ELSE%dE\n", number);
-        }
-        fprintf(stdout, "ELSE%dS:\n", number);
-        if (child->val.children->next->next) {
-            codegenSingleCommand(child->val.children->next->next);
-            fprintf(stdout, "ELSE%dE:\n", number);
-        }
+        codegenIf(child);
         return;
     case WHILE_LOOP:
-        number = uniqueNum++;
-        fprintf(stdout, "L%dS:\n", number);
-        codegenExpr(child->val.children, 0);
-        fprintf(stdout, "beq r0, L%dE\n", number);
-        codegenSingleCommand(child->val.children->next);
-        fprintf(stdout, "br L%dS\n", number);
-        fprintf(stdout, "L%dE:\n", number);
+        codegenWhileLoop(child);
         return;
     case COMMAND:
         for (temp = child->val.children; temp != NULL; temp = temp->next) {
@@ -214,10 +200,7 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         }
         return;
     case DIRECT_ASSIGN:
-        codegenExpr(child->val.children->next, 0);
-        offset = child->val.children->val.definition->val.frameIndex*4;
-        if (child->val.children->val.definition->val.isParam) offset += frameArgOffset;
-        fprintf(stdout, "st r0, %d(r5)\n", offset + entireFrameOffset);
+        codegenDirectAssign(child);
         return;
     case INDIRECT_ASSIGN:
         codegenExpr(child->val.children, 0);
@@ -285,6 +268,57 @@ static void codegenIdentRef(struct ASTLinkedNode *varref, int regDest)
     return;
 }
 
+static void codegenWhileLoop(struct ASTLinkedNode *loop)
+{
+    // We always use j instead of br to avoid issues with labels being too far apart
+    int number = uniqueNum++;
+    fprintf(stdout, "L%dS:\n", number);
+    codegenExpr(loop->val.children, 0);
+    fprintf(stdout, "beq r0, L%dEInter\n", number);
+    fprintf(stdout, "br L%dEInterEnd\n", number);
+    fprintf(stdout, "L%dEInter:\n", number);
+    fprintf(stdout, "j L%dE\n", number);
+    fprintf(stdout, "L%dEInterEnd:\n", number);
+    codegenSingleCommand(loop->val.children->next);
+    fprintf(stdout, "j L%dS\n", number);
+    fprintf(stdout, "L%dE:\n", number);
+}
+
+static void codegenIf(struct ASTLinkedNode *ifExpr)
+{
+    // We always use j instead of br to avoid issues with labels being too far apart
+    int number = uniqueNum++;
+    codegenExpr(ifExpr->val.children, 0);
+    fprintf(stdout, "beq r0, ELSE%dSInter\n", number);
+    fprintf(stdout, "br ELSE%dSInterEnd\n", number);
+    fprintf(stdout, "ELSE%dSInter:\nj ELSE%dS\nELSE%dSInterEnd:\n", number, number, number);
+    codegenSingleCommand(ifExpr->val.children->next);
+    if (ifExpr->val.children->next->next) {
+        fprintf(stdout, "j ELSE%dE\n", number);
+    }
+    fprintf(stdout, "ELSE%dS:\n", number);
+    if (ifExpr->val.children->next->next) {
+        codegenSingleCommand(ifExpr->val.children->next->next);
+        fprintf(stdout, "ELSE%dE:\n", number);
+    }
+}
+
+static void codegenDirectAssign(struct ASTLinkedNode *assignment)
+{
+    codegenExpr(assignment->val.children->next, 0);
+    if (assignment->val.children->val.definition->val.isStatic) {
+        struct ASTLinkedNode *ident = assignment->val.children->val.definition->val.children;
+        char *name = calloc(ident->val.endIndex - ident->val.startIndex + 1, sizeof(char));
+        getInputSubstr(name, ident->val.startIndex, ident->val.endIndex);
+        fprintf(stdout, "ld $%s, r1\nst r0, (r1)\n", name);
+        free(name);
+        return;
+    }
+    int offset = assignment->val.children->val.definition->val.frameIndex*4;
+    if (assignment->val.children->val.definition->val.isParam) offset += frameArgOffset;
+    fprintf(stdout, "st r0, %d(r5)\n", offset + entireFrameOffset);
+}
+
 /*
  * Generates asm to compute expression and store result in regDest
  * Preserves all regs < regDest, assumes regs >= regDest can be modified at will
@@ -303,7 +337,16 @@ static void codegenExpr(struct ASTLinkedNode *expr, int regDest)
         codegenIdentRef(expr, regDest);
         return;
     } else if (isInfix(expr->val.operationType) && (expr->val.children->val.isConstant || expr->val.children->next->val.isConstant)) {
-        // TODO
+        // FOR TESTING PURPOSES! WILL BE REMOVED!
+        if (expr->val.operationType == RIGHT_SHIFT && expr->val.children->next->val.isConstant) {
+            codegenExpr(expr->val.children, regDest);
+            fprintf(stdout, "shr $%d, r%d\n", expr->val.children->next->val.val, regDest);
+            return;
+        } else if (expr->val.operationType == LEFT_SHIFT && expr->val.children->next->val.isConstant) {
+            codegenExpr(expr->val.children, regDest);
+            fprintf(stdout, "shl $%d, r%d\n", expr->val.children->next->val.val, regDest);
+            return;
+        }
     }
 
     int left = regDest;
@@ -432,8 +475,8 @@ static void codegenOperation(enum TokenType type, int left, int right)
         uniqueNum++;
 		return;
 	case AND:
-        fprintf(stdout, "beq r%d, C%dE\nbeq r%d, C%dE\nld $1, r%d\nC%dE:\n",
-            left, uniqueNum, right, uniqueNum, left, uniqueNum);
+        fprintf(stdout, "beq r%d, C%dS\nbeq r%d, C%dS\nld $1, r%d\nbr C%dE\nC%dS:\nld $0, r%d\nC%dE:\n",
+            left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
         uniqueNum++;
 		return;
 	case BITWISE_AND:
