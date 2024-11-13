@@ -31,7 +31,7 @@ int main(void)
 		fflush(stdout);
 		expr = analyze(parse());
 		generateCode(expr);
-		printTree(expr);
+		//printTree(expr);
 		freeTree(expr);
 		putchar('\n');
 	}

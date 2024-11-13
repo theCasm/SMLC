@@ -85,6 +85,8 @@ static void pass1(struct AST *tree)
 	}
 }
 
+static int clobbersReturn = 0;
+
 /*
  * REQUIRES: initDefStack called, pass1 called
  * EFFECTS: does main part of context analysis by verifying:
@@ -97,6 +99,8 @@ static void pass1(struct AST *tree)
  *  - stack frame index
  *  - frameVars of fn
  *  - paramCount of fn
+ *  - clobbersReturn
+ *  - isParam of var
 */
 static void pass2(struct ASTLinkedNode *curr)
 {
@@ -113,6 +117,7 @@ static void pass2(struct ASTLinkedNode *curr)
 	case FN_DECL:
 		// TODO: set pointer to string of identifier
 		ident = curr->val.children;
+		ident->val.definition = 0;
 		params = ident->next;
 		singleCommand = params->next;
 		oldIndex = frameIndex;
@@ -121,9 +126,16 @@ static void pass2(struct ASTLinkedNode *curr)
 			getInputSubstr(name, child->val.startIndex, child->val.endIndex);
 			pushDef(child->val.startIndex, child->val.endIndex, child);
 			child->val.frameIndex = frameIndex;
+			child->val.isParam = 1;
 		}
 		curr->val.paramCount = frameIndex;
+		clobbersReturn = 0;
+		curr->val.clobbersReturn = 0;
+		frameIndex = 0;
 		pass2(singleCommand);
+		if (clobbersReturn) {
+			curr->val.clobbersReturn = 1;
+		}
 		curr->val.frameVars = frameIndex;
 		frameIndex = oldIndex;
 		for (child = params->val.children; child != NULL; child = child->next) {
@@ -149,8 +161,10 @@ static void pass2(struct ASTLinkedNode *curr)
 		// TODO: set pointer to string of identifier
 		// TODO: ensure var names are unique
 		ident = curr->val.children;
+		ident->val.definition = NULL;
 		pushDef(ident->val.startIndex, ident->val.endIndex, curr);
 		curr->val.frameIndex = frameIndex++;
+		curr->val.isParam = 0;
 		if (ident->next) pass2(ident->next);
 		break;
 	case IDENT_REF:
@@ -163,16 +177,17 @@ static void pass2(struct ASTLinkedNode *curr)
 		}
 		break;
 	case FUNC_CALL:
+		clobbersReturn = 1;
 		ident = curr->val.children;
-		curr->val.definition = searchForDef(ident->val.startIndex, ident->val.endIndex);
-		if (!curr->val.definition) {
+		ident->val.definition = searchForDef(ident->val.startIndex, ident->val.endIndex);
+		if (!ident->val.definition) {
 			name = calloc(ident->val.endIndex - ident->val.startIndex + 1, sizeof(*name));
 			getInputSubstr(name, ident->val.startIndex, ident->val.endIndex);
 			fprintf(stderr, "Could not find definition of `%s`.\n", name);
 			exit(1);
 		}
 		struct ASTLinkedNode *args = ident->next;
-		temp = curr->val.definition->val.children->next;
+		temp = ident->val.definition->val.children->next;
 		for (child = args->val.children; child != NULL; child = child->next, temp = temp->next) {
 			if (temp == NULL) {
 				fputs("Too many args\n", stderr);

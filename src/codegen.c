@@ -30,8 +30,7 @@
 
 #define DEFAULT_DATA_TOP (0x2000)
 
-//#define STACK_WORDS (128)
-#define STACK_WORDS 16
+#define STACK_WORDS (128)
 #define DEFAULT_STACK_TOP (0x3000)
 
 static void codegenProgram(struct ASTLinkedNode *program);
@@ -42,6 +41,7 @@ static void codegenIdentRef(struct ASTLinkedNode *varref, int regDest);
 static void codegenExpr(struct ASTLinkedNode *expr, int regDest);
 static void codegenOperation(enum TokenType type, int regArg, int regDest);
 static void codegenPrefixOperation(enum TokenType type, int reg);
+static void codegenDynamicMultiplication(int left, int right);
 
 static char startAsm[] = ".pos 0x1000\n"
     "_start:\n"
@@ -49,7 +49,7 @@ static char startAsm[] = ".pos 0x1000\n"
     "deca r5\n"
     "gpc $6, r6\n"
     "j main\n"
-    "halt\n";
+    "halt\n\n";
 
 static char saveAllGPRegs[] = "deca r5\t\t# save all regs\n"
     "st r0, (r5)\n"
@@ -61,7 +61,7 @@ static char saveAllGPRegs[] = "deca r5\t\t# save all regs\n"
     "st r4, 4(r5)\n"
     "st r7, (r5)\n\n";
 
-static char restoreAllGPRegs[] = "ld (r5), r7\t\t# restore all regs\n"
+static char restoreAllGPRegs[] = "\nld (r5), r7\t\t# restore all regs\n"
     "ld 4(r5), r4\n"
     "ld 8(r5), r3\n"
     "ld 12(r5), r2\n"
@@ -78,6 +78,8 @@ void generateCode(struct AST *tree)
 
 static int isInFn = 0;
 static int uniqueNum = 0;
+static int frameArgOffset = 0;
+static int entireFrameOffset = 0;
 
 /*
  * EFFECTS: outputs assembler for the program organized as such:
@@ -106,8 +108,8 @@ static void codegenProgram(struct ASTLinkedNode *program)
     fprintf(stdout, ".pos 0x%X\n", DEFAULT_DATA_TOP);
     for (child = program->val.children; child != NULL; child = child->next) {
         if (child->val.children->val.type == VAR_DECL) {
-            char *name = calloc(child->val.children->val.endIndex - child->val.children->val.startIndex + 1, sizeof(char));
-            getInputSubstr(name, child->val.children->val.startIndex, child->val.children->val.endIndex);
+            char *name = calloc(child->val.children->val.children->val.endIndex - child->val.children->val.children->val.startIndex + 1, sizeof(char));
+            getInputSubstr(name, child->val.children->val.children->val.startIndex, child->val.children->val.children->val.endIndex);
             fprintf(stdout, "%s: .long 0\n", name);
             free(name);
         }
@@ -117,9 +119,12 @@ static void codegenProgram(struct ASTLinkedNode *program)
     for (size_t i = 0; i < STACK_WORDS; i++) {
         fputs(".long 0\n", stdout);
     }
-    fputs("_stackBottom:\n", stdout);
+    fputs("_stackBottom: .long 0\n", stdout);
 }
 
+/*
+ * 
+*/
 static void codegenFuncDecl(struct ASTLinkedNode *decl)
 {
     char *name = calloc(decl->val.children->val.endIndex - decl->val.children->val.startIndex + 1, sizeof(char));
@@ -127,12 +132,29 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl)
     fprintf(stdout, "%s:\n", name);
     free(name);
     fputs(saveAllGPRegs, stdout);
-    fprintf(stdout, "ld $-%d, r0\t\t# allocate local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+    frameArgOffset += 24;
+    if (decl->val.clobbersReturn) {
+        fputs("deca r5\t\t# save r6\nst r6, (r5)\n", stdout);
+        frameArgOffset += 4;
+    }
+    if (decl->val.frameVars > 0) {
+        fprintf(stdout, "ld $-%d, r0\t\t# allocate local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+        frameArgOffset += 4*decl->val.frameVars;
+    }
     isInFn = 1;
     codegenSingleCommand(decl->val.children->next->next);
-    fprintf(stdout, "\nld $%d, r0\t\t# de-alloc local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+    if (decl->val.frameVars > 0) {
+        fprintf(stdout, "\nld $%d, r0\t\t# de-alloc local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+        frameArgOffset -= 4*decl->val.frameVars;
+    }
+
+    if (decl->val.clobbersReturn) {
+        fputs("ld (r5), r6\t\t# restore r6\ninca r5\n", stdout);
+        frameArgOffset -= 4;
+    }
     fputs(restoreAllGPRegs, stdout);
-    fputs("j (r6)\n", stdout);
+    frameArgOffset -= 24;
+    fputs("j (r6)\t\t# return\n\n", stdout);
 }
 
 /*
@@ -140,7 +162,15 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl)
  */
 static void codegenSingleCommand(struct ASTLinkedNode *command)
 {
+    if (command->val.type == RETURN_DIRECTIVE) {
+        isInFn = 0;
+        if (command->val.children) {
+            codegenExpr(command->val.children, 0);
+        }
+        return;
+    }
     struct ASTLinkedNode *temp, *child = command->val.children;
+    int number, offset;
     switch(child->val.type) {
 
     case CONST_DECL:
@@ -150,11 +180,32 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
             return;
         }
         codegenExpr(child->val.children->next, 0);
-        fprintf(stdout, "st r0, %d(r5)\n", child->val.frameIndex*4);
+        offset = child->val.frameIndex*4;
+        if (child->val.isParam) offset += frameArgOffset;
+        fprintf(stdout, "st r0, %d(r5)\n", offset + entireFrameOffset);
         return;
     case IF_EXPR:
+        codegenExpr(child->val.children, 0);
+        number = uniqueNum++;
+        fprintf(stdout, "beq r0, ELSE%dS\n", number);
+        codegenSingleCommand(child->val.children->next);
+        if (child->val.children->next->next) {
+            fprintf(stdout, "br ELSE%dE\n", number);
+        }
+        fprintf(stdout, "ELSE%dS:\n", number);
+        if (child->val.children->next->next) {
+            codegenSingleCommand(child->val.children->next->next);
+            fprintf(stdout, "ELSE%dE:\n", number);
+        }
         return;
     case WHILE_LOOP:
+        number = uniqueNum++;
+        fprintf(stdout, "L%dS:\n", number);
+        codegenExpr(child->val.children, 0);
+        fprintf(stdout, "beq r0, L%dE\n", number);
+        codegenSingleCommand(child->val.children->next);
+        fprintf(stdout, "br L%dS\n", number);
+        fprintf(stdout, "L%dE:\n", number);
         return;
     case COMMAND:
         for (temp = child->val.children; temp != NULL; temp = temp->next) {
@@ -164,7 +215,9 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         return;
     case DIRECT_ASSIGN:
         codegenExpr(child->val.children->next, 0);
-        fprintf(stdout, "st r0, %d(r5)\n", child->val.frameIndex*4);
+        offset = child->val.children->val.definition->val.frameIndex*4;
+        if (child->val.children->val.definition->val.isParam) offset += frameArgOffset;
+        fprintf(stdout, "st r0, %d(r5)\n", offset + entireFrameOffset);
         return;
     case INDIRECT_ASSIGN:
         codegenExpr(child->val.children, 0);
@@ -173,9 +226,6 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         break;
     case FUNC_CALL:
         codegenFuncCall(child, 0);
-        return;
-    case RETURN_DIRECTIVE:
-        isInFn = 0;
         return;
     default:
         fprintf(stderr, "codegenSingleCommand does not recognize `%s` - dang coupling :c\nIgnoring\n",
@@ -187,18 +237,32 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
 static void codegenFuncCall(struct ASTLinkedNode *call, int regDest)
 {
     struct ASTLinkedNode *temp;
-    fputs("deca r5\nst r0, (r5)\n", stdout);
-    fprintf(stdout, "ld $-%d, r0\nadd r0, r5\n", 4*call->val.paramCount);
+    if (regDest != 0) {
+        fputs("deca r5\t\t# Save r0\nst r0, (r5)\n\n", stdout);
+        entireFrameOffset += 4;
+    }
+    if (call->val.children->val.definition->val.paramCount > 0) {
+        fprintf(stdout, "ld $-%d, r0\t\t# alloc args\nadd r0, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
+        entireFrameOffset += 4*call->val.children->val.definition->val.paramCount;
+    }
+    int i = 0;
     for (temp = call->val.children->next->val.children; temp != NULL; temp = temp->next) {
-        // TODO:
+        codegenExpr(temp, 0);
+        fprintf(stdout, "st r0, %d(r5)\n", i++*4);
     }
     char *name = calloc(call->val.children->val.endIndex - call->val.children->val.startIndex + 1, sizeof(char));
     getInputSubstr(name, call->val.children->val.startIndex, call->val.children->val.endIndex);
-    fprintf(stdout, "j %s", name);
+    fprintf(stdout, "gpc $6, r6\nj %s\n", name);
     free(name);
-    fprintf(stdout, "mov r0, r%d", regDest);
-    fputs("ld (r5), r0\ninca r5\n", stdout);
-    fprintf(stdout, "ld $%d, r0\nadd r0, r5\n", 4*call->val.paramCount);
+    if(regDest != 0) {
+        fprintf(stdout, "mov r0, r%d\n", regDest);
+        fputs("ld (r5), r0\t\t# restore r0\ninca r5\n\n", stdout);
+        entireFrameOffset -= 4;
+    }
+    if (call->val.children->val.definition->val.paramCount > 0) {
+        fprintf(stdout, "ld $%d, r0\t\t# dealloc args\nadd r0, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
+        entireFrameOffset -= 4*call->val.children->val.definition->val.paramCount;
+    }
 }
 
 static void codegenIdentRef(struct ASTLinkedNode *varref, int regDest)
@@ -215,8 +279,54 @@ static void codegenIdentRef(struct ASTLinkedNode *varref, int regDest)
         free(name);
         return;
     }
-    fprintf(stdout, "ld %d(r5), r%d\n", 4*varref->val.definition->val.frameIndex, regDest);
+    int offset = varref->val.definition->val.frameIndex*4;
+    if (varref->val.definition->val.isParam) offset += frameArgOffset;
+    fprintf(stdout, "ld %d(r5), r%d\n", offset + entireFrameOffset, regDest);
     return;
+}
+
+/*
+ * Generates asm to compute expression and store result in regDest
+ * Preserves all regs < regDest, assumes regs >= regDest can be modified at will
+ * r5, r6 are treated specially and are never clobbered.
+ * REQUIRES: regDest is not 7. We need at least 2 regs to work with.
+*/
+static void codegenExpr(struct ASTLinkedNode *expr, int regDest)
+{
+    if (expr->val.type == NUMBER_LITERAL) {
+        fprintf(stdout, "ld $%d, r%d\n", expr->val.val, regDest);
+        return;
+    } else if (expr->val.type == FUNC_CALL) {
+        codegenFuncCall(expr, regDest);
+        return;
+    } else if (expr->val.type == IDENT_REF) {
+        codegenIdentRef(expr, regDest);
+        return;
+    } else if (isInfix(expr->val.operationType) && (expr->val.children->val.isConstant || expr->val.children->next->val.isConstant)) {
+        // TODO
+    }
+
+    int left = regDest;
+    int right = regDest + 1;
+    if (isInfix(expr->val.operationType)) {
+        if (regDest >= 4) {
+            codegenExpr(expr->val.children, left);
+            fprintf(stdout, "deca r5\nst r%d (r5)\n", left);
+            entireFrameOffset += 4;
+            codegenExpr(expr->val.children->next, left);
+            fprintf(stdout, "mov r%d, r7\n", left);
+            fprintf(stdout, "ld (r5), r%d\ninca r5\n", left);
+            entireFrameOffset -= 4;
+            codegenOperation(expr->val.operationType, left, 7);
+            return;
+        }
+        codegenExpr(expr->val.children, left);
+        codegenExpr(expr->val.children->next, right);
+        codegenOperation(expr->val.operationType, left, right);
+        return;
+    }
+    codegenExpr(expr->val.children, left);
+    codegenPrefixOperation(expr->val.operationType, left);
 }
 
 /*
@@ -232,7 +342,9 @@ static void codegenPrefixOperation(enum TokenType type, int reg)
         fprintf(stdout, "not r%d\n", reg);
         return;
     case NOT:
-        // TODO
+        fprintf(stdout, "beq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            reg, uniqueNum, reg, uniqueNum, uniqueNum, reg, uniqueNum);
+        uniqueNum++;
         return;
     case DEREF:
         fprintf(stdout, "ld (r%d), r%d\n", reg, reg);
@@ -244,42 +356,9 @@ static void codegenPrefixOperation(enum TokenType type, int reg)
 }
 
 /*
- * Generates asm to compute expression and store result in regDest
- * Preserves all regs < regDest, assumes regs >= regDest can be modified at will
- * r5, r6 are treated specially and are never clobbered.
-*/
-static void codegenExpr(struct ASTLinkedNode *expr, int regDest)
-{
-    if (expr->val.type == NUMBER_LITERAL) {
-        fprintf(stdout, "ld $%d, r%d", expr->val.val, regDest);
-        return;
-    } else if (expr->val.type == FUNC_CALL) {
-        codegenFuncCall(expr, regDest);
-        return;
-    } else if (expr->val.type == IDENT_REF) {
-        codegenIdentRef(expr, regDest);
-        return;
-    }
-
-    int left = regDest;
-    int right = regDest + 1;
-    if (isInfix(expr->val.operationType)) {
-        if (regDest >= 4) {
-            // TODO
-            return;
-        }
-        codegenExpr(expr->val.children, left);
-        codegenExpr(expr->val.children->next, right);
-        codegenOperation(expr->val.operationType, left, right);
-        return;
-    }
-    codegenExpr(expr->val.children, left);
-    codegenPrefixOperation(expr->val.operationType, left);
-}
-
-/*
  * Computes operation and stores in left.
  * CLOBBERS *BOTH* left and right.
+ * TODO: handle operation w/ one of left, right an integer literal in different function
 */
 static void codegenOperation(enum TokenType type, int left, int right)
 {
@@ -291,13 +370,7 @@ static void codegenOperation(enum TokenType type, int left, int right)
 		fprintf(stdout, "not r%d\ninc r%d\nadd r%d, r%d\n", right, right, right, left);
 		return;
 	case TIMES:
-        // We use r6 for this - having a guaranteed extra reg is helpful.
-        fputs("deca r5\nst r6, (r5)\n", stdout);
-        fprintf(stdout, "L%d:\n", uniqueNum);
-        fprintf(stdout, "ld $1, r6\nand r%d, r6\nbe r6, L%dC\ninc r%d\n", right, uniqueNum, left);
-        fprintf(stdout, "L%dC:\nshr $1, r%d\n shl $1, r%d\n", uniqueNum, right, left);
-        fprintf(stdout, "L%dE:\n", uniqueNum++);
-        fputs("ld (r5), r6\ninca r5\n", stdout);
+        codegenDynamicMultiplication(left, right);
 		return;
 	case DIVIDE:
         // TODO: not too important right now.
@@ -313,40 +386,55 @@ static void codegenOperation(enum TokenType type, int left, int right)
 		fprintf(stdout, "add r%d, r%d\n", right, left);
 		return;
 	case RIGHT_SHIFT:
+        // we assume right is at most 32. Otherwise, this is equivilant to only looking at rightmost 5 bit.
         // TODO:
 		fprintf(stdout, "add r%d, r%d\n", right, left);
 		return;
 	case LESS_THAN:
-        // TODO:
-		fprintf(stdout, "add r%d, r%d\n", right, left);
-		return;
+        codegenOperation(MINUS, right, left);
+        fprintf(stdout, "bgt r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
+        return;
 	case LESS_THAN_EQUALS:
-        // TODO;
-		fprintf(stdout, "add r%d, r%d\n", right, left);
-		return;
+        codegenOperation(MINUS, right, left);
+        fprintf(stdout, "bgt r%d, C%dS\nbe r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            right, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
+        return;
 	case GREATER_THAN:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
-		return;
+        codegenOperation(MINUS, left, right);
+        fprintf(stdout, "bgt r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
+        return;
 	case GREATER_THAN_EQUALS:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
-		return;
+        codegenOperation(MINUS, left, right);
+        fprintf(stdout, "bgt r%d, C%dS\nbe r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            left, uniqueNum, left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
+        return;
 	case EQUALS:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+        codegenOperation(MINUS, left, right);
+		fprintf(stdout, "beq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS: ld $1, r%d\nC%dE:\n",
+            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
 		return;
 	case NOT_EQUALS:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+        codegenOperation(MINUS, left, right);
+		fprintf(stdout, "beq r%d, C%dS\nld $1, r%d\nbr C%dE\nC%dS: ld $0, r%d\nC%dE:\n",
+            left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
 		return;
 	case OR:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+        fprintf(stdout, "beq r%d, C%dS\nbeq r%d, C%dS\nld $0, r%d\nbr C%dE\nC%dS:ld $1, r%d\nC%dE:\n",
+            left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        uniqueNum++;
 		return;
 	case AND:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, left);
+        fprintf(stdout, "beq r%d, C%dE\nbeq r%d, C%dE\nld $1, r%d\nC%dE:\n",
+            left, uniqueNum, right, uniqueNum, left, uniqueNum);
+        uniqueNum++;
 		return;
 	case BITWISE_AND:
         // TODO
@@ -364,4 +452,33 @@ static void codegenOperation(enum TokenType type, int left, int right)
 		fprintf(stderr, "CODEGEN: idk how to fold in %s\n", TokenStrings[type]);
 		return;
 	}
+}
+
+/*
+ * Calculates left * right, stores result in left
+*/
+static void codegenDynamicMultiplication(int left, int right)
+{
+    // we need 2 extra regs for this - we use r6, and either r7 or r4 or r1
+    int tempReg;
+    if (left != 7 && right != 7) {
+        tempReg = 7;
+    } else if (left != 4 && right != 4) {
+        tempReg = 4;
+    } else {
+        tempReg = 1;
+    }
+
+
+    fprintf(stdout, "deca r5\nst r6, (r5)\ndeca r5\nst r%d, (r5)\n", tempReg);
+    fprintf(stdout, "mov r%d, r%d\n", left, tempReg);
+    fprintf(stdout, "ld $0, r%d\n", left);
+    fprintf(stdout, "L%d:\n", uniqueNum);
+    fprintf(stdout, "beq r%d, L%dE\n", right, uniqueNum);
+    fprintf(stdout, "ld $1, r6\nand r%d, r6\nbeq r6, L%dC\nadd r%d, r%d\n", right, uniqueNum, tempReg, left);
+    fprintf(stdout, "L%dC:\nshr $1, r%d\n shl $1, r%d\n", uniqueNum, right, tempReg);
+    fprintf(stdout, "br L%d\n", uniqueNum);
+    fprintf(stdout, "L%dE:\n", uniqueNum);
+    fprintf(stdout, "ld (r5), r%d\ninca r5\nld (r5), r6\ninca r5\n", tempReg);
+    uniqueNum++;
 }

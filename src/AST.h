@@ -57,13 +57,16 @@ struct ASTNode {
             // for variable declarations
             int isStatic;
             int frameIndex;
+            int isParam;
         };
         enum TokenType operationType; // for expressions
         int val; // for constants
         struct {
-            int isVoid; // for functions
-            int frameVars; // for functions
-            int paramCount; // for functions
+            // for functions
+            int isVoid;
+            int frameVars;
+            int paramCount;
+            int clobbersReturn;
         };
         struct ASTLinkedNode *definition; // for references
     };

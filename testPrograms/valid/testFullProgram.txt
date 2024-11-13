@@ -23,7 +23,7 @@ func void insertSort(s, n) {
         var j = i
         while j != 0 and *(s + 24*j - 4) > *(s + 24*j + 20) {
             var b = s + 24*j
-            swap(b, s + 24*j - 24)
+            swap(b, b - 24)
             swap(b + 4, b - 20)
             swap(b + 8, b - 16)
             swap(b + 12, b - 12)
