@@ -45,6 +45,10 @@ static void codegenExpr(struct ASTLinkedNode *expr, int regDest);
 static void codegenInfixOperation(struct ASTLinkedNode *expr, int regDest);
 static void codegenPrefixOperation(struct ASTLinkedNode *expr, int reg);
 static void codegenMinus(int left, int right);
+static void codegenDivide(int left, int right);
+static void codegenModulus(int left, int right);
+static void codegenLeftShift(int left, int right);
+static void codegenRightShift(int left, int right);
 static void codegenNotEquals(int left, int right);
 static void codegenOr(int left, int right);
 static void codegenAnd(int left, int right);
@@ -340,33 +344,10 @@ static void codegenExpr(struct ASTLinkedNode *expr, int regDest)
     } else if (expr->val.type == IDENT_REF) {
         codegenIdentRef(expr, regDest);
         return;
-    } else if (isInfix(expr->val.operationType) && (expr->val.children->val.isConstant || expr->val.children->next->val.isConstant)) {
-        // FOR TESTING PURPOSES! WILL BE REMOVED!
-        if (expr->val.operationType == RIGHT_SHIFT && expr->val.children->next->val.isConstant) {
-            codegenExpr(expr->val.children, regDest);
-            fprintf(stdout, "shr $%d, r%d\n", expr->val.children->next->val.val, regDest);
-            return;
-        } else if (expr->val.operationType == LEFT_SHIFT && expr->val.children->next->val.isConstant) {
-            codegenExpr(expr->val.children, regDest);
-            fprintf(stdout, "shl $%d, r%d\n", expr->val.children->next->val.val, regDest);
-            return;
-        }
     }
 
     if (isInfix(expr->val.operationType)) {
         codegenInfixOperation(expr, regDest);
-        /*if (regDest >= 4) {
-
-            codegenExpr(expr->val.children->next, left);
-            fprintf(stdout, "mov r%d, r7\n", left);
-            fprintf(stdout, "ld (r5), r%d\ninca r5\n", left);
-            entireFrameOffset -= 4;
-            codegenInfixOperation(expr->val.operationType, left, 7);
-            return;
-        }
-        codegenExpr(expr->val.children, left);
-        codegenExpr(expr->val.children->next, right);
-        codegenInfixOperation(expr->val.operationType, left, right);*/
         return;
     }
     codegenPrefixOperation(expr, regDest);
@@ -406,8 +387,22 @@ static void codegenPrefixOperation(struct ASTLinkedNode *expr, int destReg)
 static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
 {
     // TODO: handle operation w/ one of left, right an integer literal in different function
+
+	// These we do now because of how horrible the dynamic versions are
+	if (expr->val.children->next->val.isConstant) {
+		if (expr->val.operationType == LEFT_SHIFT) {
+			codegenExpr(expr->val.children, destReg);
+			fprintf(stdout, "shl $%d, r%d\n", expr->val.children->next->val.val, destReg);
+			return;
+		} else if (expr->val.operationType == RIGHT_SHIFT) {
+			codegenExpr(expr->val.children, destReg);
+			fprintf(stdout, "shr $%d, r%d\n", expr->val.children->next->val.val, destReg);
+			return;
+		}
+	}
+
+	codegenExpr(expr->val.children, destReg);
     int right = destReg + 1;
-    codegenExpr(expr->val.children, destReg);
     if (destReg >= 4) {
         fprintf(stdout, "deca r5\nst r%d (r5)\n", destReg);
         entireFrameOffset += 4;
@@ -420,7 +415,7 @@ static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
 		codegenExpr(expr->val.children->next, right);
 	}
     switch (expr->val.operationType) {
-	case PLUS:
+	case PLUS:	
         fprintf(stdout, "add r%d, r%d\n", right, destReg);
 		return;
 	case MINUS:
@@ -430,22 +425,16 @@ static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
         codegenDynamicMultiplication(destReg, right);
 		return;
 	case DIVIDE:
-        // TODO: not too important right now.
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+        codegenDivide(destReg, right);
 		return;
 	case MODULO:
-        // TODO: not too important right now.
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+        codegenModulus(destReg, right);
 		return;
 	case LEFT_SHIFT:
-        // TODO: we assume right is at most 32. Otherwise, this is equivilant to only looking at rightmost 5 bit.
-        // TODO:
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+		codegenLeftShift(destReg, right);
 		return;
 	case RIGHT_SHIFT:
-        // we assume right is at most 32. Otherwise, this is equivilant to only looking at rightmost 5 bit.
-        // TODO:
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+		codegenRightShift(destReg, right);
 		return;
 	case LESS_THAN:
         codegenMinus(destReg, right);
@@ -482,22 +471,31 @@ static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
 		return;
 	case OR:
         codegenOr(destReg, right);
-        
 		return;
 	case AND:
         codegenAnd(destReg, right);
 		return;
 	case BITWISE_AND:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+		fprintf(stdout, "and r%d, r%d\n", right, destReg);
 		return;
 	case BITWISE_OR:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+        fprintf(stdout, "not r%d\nnot r%d\nand r%d, r%d\nnot r%d\n",
+			destReg, right, right, destReg, destReg);
 		return;
 	case BITWISE_XOR:
-        // TODO
-		fprintf(stdout, "add r%d, r%d\n", right, destReg);
+		// a + b = a (+) b + carry = a (+) b + (a ^ b) << 1
+		// ==> a (+) b = a + b - (a ^ b) << 1
+		fputs("deca r5\nst r6 (r5)\n", stdout);
+		fprintf(stdout, 
+			"mov r%d, r6\n"
+			"and r%d, r6\n"
+			"shl $1, r6\n"
+			"not r6\n"
+			"inc r6\n"
+			"add r%d, r%d\n"
+			"add r6, r%d\n",
+			right, destReg, right, destReg, destReg);
+		fputs("ld (r5) r6\ninca r5\n", stdout);
 		return;
 	default:
 		fprintf(stderr, "CODEGEN: idk how to fold in %s\n", TokenStrings[expr->val.type]);
@@ -508,49 +506,256 @@ static void codegenInfixOperation(struct ASTLinkedNode *expr, int destReg)
 static void codegenMinus(int left, int right)
 {
     fprintf(stdout, 
-        "not r%d\n\
-        inc r%d\n\
-        add r%d, r%d\n\
-        ", right, right, right, left);
+        "not r%d\n"
+        "inc r%d\n"
+        "add r%d, r%d\n",
+        right, right, right, left);
+}
+
+static void codegenDivide(int left, int right)
+{
+	/*
+	 * We need 3 helper regs - division is hard enough when you can decide the hardware!
+	 * This is a modified non-restorative division algorithm given we only have 32 bit regs
+	 * and want integer division.
+	 */
+
+	int count, negativeDivisor, result;
+	count = 6;
+	if (right != 7) {
+		negativeDivisor = 7;
+		if (left != 4 && right != 4) {
+			result = 4;
+		} else if (left != 3 && right != 3) {
+			result = 3;
+		} else {
+			result = 2;
+		}
+	} else if (left != 4) {
+		negativeDivisor = 4;
+		if (left != 3) {
+			result = 3;
+		} else {
+			result = 2;
+		}
+	} else {
+		negativeDivisor = 3;
+		result = 2;
+	}
+	fprintf(stdout,
+		"deca r5\n"
+		"st r%d, (r5)\n"
+		"deca r5\n"
+		"st r%d, (r5)\n"
+		"deca r5\n"
+		"st r%d, (r5)\n",
+		count, negativeDivisor, result);
+	// first, we shift the divisor so everything lines up
+	fprintf(stdout,
+		"ld $1, r%d\n"
+		"ld $0, r%d\n"
+		"L%d1S:\n"
+		"mov r%d, r%d\n"
+		"not r%d\n"
+		"inc r%d\n"
+		"add r%d, r%d\n"
+		"bgt r%d, L%d1E\n"
+		"inc r%d\n"
+		"shl $1, r%d\n"
+		"br L%d1S\n"
+		"L%d1E:\n",
+		count, result, uniqueNum, left, negativeDivisor, negativeDivisor, negativeDivisor, right, negativeDivisor,
+		negativeDivisor, uniqueNum, count, right, uniqueNum, uniqueNum);
+	// now, we do the division
+	fprintf(stdout,
+		"mov r%d, r%d\n"
+		"not r%d\n"
+		"inc r%d\n"
+		"L%d2S:\n"
+		"beq r%d, L%d2E\n"
+		"dec r%d\n"
+		"shl $1, r%d\n"
+		"bgt r%d, L%d2C\n"
+		"beq r%d, L%d2C\n"
+		"add r%d, r%d\n"
+		"dec r%d\n"
+		"br L%d2CE\n"
+		"L%d2C:\n"
+		"add r%d, r%d\n"
+		"inc r%d\n"
+		"L%d2CE:\n"
+		"shl $1, r%d\n"
+		"br L%d2S\n"
+		"L%d2E:\n",
+		right, negativeDivisor, negativeDivisor, negativeDivisor, uniqueNum, count, uniqueNum, count, result,
+        left, uniqueNum, left, uniqueNum, right, left, result, uniqueNum, uniqueNum, negativeDivisor, left,
+        result, uniqueNum, left, uniqueNum, uniqueNum);
+    // finally, we adjust the result. non-res can choose a negative remainder for integer division - we fix that here
+    fprintf(stdout,
+        "bgt r%d, C%d\n"
+        "beq r%d, C%d\n"
+        "dec r%d\n"
+        "C%d:\n"
+        "mov r%d, r%d\n",
+        left, uniqueNum, left, uniqueNum, result, uniqueNum, result, left);
+	fprintf(stdout,
+		"ld (r5), r%d\n"
+		"inca r5\n"
+		"ld (r5), r%d\n"
+		"inca r5\n"
+		"ld (r5), r%d\n"
+		"inca r5\n",
+		result, negativeDivisor, count);
+    uniqueNum++;
+}
+
+
+static void codegenModulus(int left, int right)
+{
+
+}
+
+/*
+ * I am of the opinion that allowing a register input for shl would
+ * be worth it. This is hell.
+*/
+static void codegenLeftShift(int left, int right)
+{
+	fputs("deca r5\nst r6 (r5)\n", stdout);
+	fprintf(stdout,
+		"ld $-31, r6\n"
+		"add r%d, r6\n"
+		"bgt bigshl%d\n"
+		"br smallshl%d\n"
+		"bigshl%d:\n"
+		"ld $0, r%d\n"
+		"br LSH%d32\n"
+		"smallshl%d:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, LSH%d2\n"
+		"shl $1, r%d\n"
+		"LSH%d2:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, LSH%d4\n"
+		"shl $2, r%d\n"
+		"LSH%d4:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, LSH%d8\n"
+		"shl $4, r%d\n"
+		"LSH%d8:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, LSH%d16\n"
+		"shl $8, r%d\n"
+		"LSH%d16:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, LSH%d16\n"
+		"shl $16, r%d\n"
+		"LSH%d32:\n",
+		right, uniqueNum, uniqueNum, uniqueNum, left, uniqueNum, uniqueNum, right, right,
+		uniqueNum, left, uniqueNum, right, right, uniqueNum, left, uniqueNum,
+		right, right, uniqueNum, left, uniqueNum, right, right, uniqueNum, left,
+		uniqueNum, right, right, uniqueNum, left, uniqueNum);
+	uniqueNum++;
+	fputs("ld (r5) r6\ninca r5\n", stdout);
+}
+
+static void codegenRightShift(int left, int right)
+{
+	fputs("deca r5\nst r6 (r5)\n", stdout);
+	fprintf(stdout,
+		"ld $-31, r6\n"
+		"add r%d, r6\n"
+		"bgt bigshr%d\n"
+		"br smallshr%d\n"
+		"bigshr%d:\n"
+		"ld $0, r%d\n"
+		"br LSH%d32\n"
+		"smallshr%d:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, RSH%d2\n"
+		"shr $1, r%d\n"
+		"RSH%d2:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, RSH%d4\n"
+		"shr $2, r%d\n"
+		"RSH%d4:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, RSH%d8\n"
+		"shr $4, r%d\n"
+		"RSH%d8:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, RSH%d16\n"
+		"shr $8, r%d\n"
+		"RSH%d16:\n"
+		"ld $1, r6\n"
+		"and r%d, r6\n"
+		"shr $1, r%d\n"
+		"beq r6, RSH%d16\n"
+		"shr $16, r%d\n"
+		"RSH%d32:\n",
+		right, uniqueNum, uniqueNum, uniqueNum, left, uniqueNum, uniqueNum, right, right,
+		uniqueNum, left, uniqueNum, right, right, uniqueNum, left, uniqueNum,
+		right, right, uniqueNum, left, uniqueNum, right, right, uniqueNum, left,
+		uniqueNum, right, right, uniqueNum, left, uniqueNum);
+	uniqueNum++;
+	fputs("ld (r5) r6\ninca r5\n", stdout);
 }
 
 static void codegenNotEquals(int left, int right)
 {
     codegenMinus(left, right);
     fprintf(stdout,
-        "beq r%d, C%dS\n\
-        ld $1, r%d\n\
-        br C%dE\n\
-        C%dS: ld $0, r%d\n\
-        C%dE:\
-        ", left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        "beq r%d, C%dS\n"
+        "ld $1, r%d\n"
+        "br C%dE\n"
+        "C%dS: ld $0, r%d\n"
+        "C%dE:\n",
+        left, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
     uniqueNum++;
 }
 
 static void codegenOr(int left, int right)
 {
     fprintf(stdout,
-        "beq r%d, C%dS\
-        beq r%d, C%dS\
-        ld $0, r%d\
-        br C%dE\
-        C%dS:ld $1, r%d\
-        C%dE:\
-        ", left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        "beq r%d, C%dS\n"
+        "beq r%d, C%dS\n"
+        "ld $0, r%d\n"
+        "br C%dE\n"
+        "C%dS:ld $1, r%d\n"
+        "C%dE:\n",
+        left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
     uniqueNum++;
 }
 
 static void codegenAnd(int left, int right)
 {
     fprintf(stdout,
-        "beq r%d, C%dS\n\
-        beq r%d, C%dS\n\
-        ld $1, r%d\n\
-        br C%dE\n\
-        C%dS:\n\
-        ld $0, r%d\n\
-        C%dE:\n\
-        ", left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
+        "beq r%d, C%dS\n"
+        "beq r%d, C%dS\n"
+        "ld $1, r%d\n"
+        "br C%dE\n"
+        "C%dS:\n"
+        "ld $0, r%d\n"
+        "C%dE:\n",
+        left, uniqueNum, right, uniqueNum, left, uniqueNum, uniqueNum, left, uniqueNum);
     uniqueNum++;
 }
 
