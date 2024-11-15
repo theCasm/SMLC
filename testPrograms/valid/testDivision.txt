@@ -1,0 +1,8 @@
+var s
+
+func void main() {
+    s = 5001
+    s = s / 9
+    s = 512
+    s = s % 100
+}
