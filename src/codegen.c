@@ -632,7 +632,7 @@ static void codegenModulus(int left, int right)
 		count, negativeDivisor);
 	// first, we shift the divisor so everything lines up
 	fprintf(stdout,
-		"ld $1, r%d\n"
+		"ld $0, r%d\n"
 		"L%d_1S:\n"
 		"mov r%d, r%d\n"
 		"not r%d\n"
