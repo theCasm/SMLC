@@ -612,7 +612,75 @@ static void codegenDivide(int left, int right)
 
 static void codegenModulus(int left, int right)
 {
-
+    /*
+     * Modified from codegenDiv 
+    */
+   int count, negativeDivisor;
+	count = 6;
+	if (right != 7) {
+		negativeDivisor = 7;
+	} else if (left != 4) {
+		negativeDivisor = 4;
+	} else {
+		negativeDivisor = 3;
+	}
+	fprintf(stdout,
+		"deca r5\n"
+		"st r%d, (r5)\n"
+		"deca r5\n"
+		"st r%d, (r5)\n",
+		count, negativeDivisor);
+	// first, we shift the divisor so everything lines up
+	fprintf(stdout,
+		"ld $1, r%d\n"
+		"L%d1S:\n"
+		"mov r%d, r%d\n"
+		"not r%d\n"
+		"inc r%d\n"
+		"add r%d, r%d\n"
+		"bgt r%d, L%d1E\n"
+		"inc r%d\n"
+		"shl $1, r%d\n"
+		"br L%d1S\n"
+		"L%d1E:\n",
+		count, uniqueNum, left, negativeDivisor, negativeDivisor, negativeDivisor, right, negativeDivisor,
+		negativeDivisor, uniqueNum, count, right, uniqueNum, uniqueNum);
+	// now, we do the division
+	fprintf(stdout,
+		"mov r%d, r%d\n"
+		"not r%d\n"
+		"inc r%d\n"
+		"L%d2S:\n"
+		"beq r%d, L%d2E\n"
+		"dec r%d\n"
+		"bgt r%d, L%d2C\n"
+		"beq r%d, L%d2C\n"
+		"add r%d, r%d\n"
+		"br L%d2CE\n"
+		"L%d2C:\n"
+		"add r%d, r%d\n"
+		"L%d2CE:\n"
+		"shr $1, r%d\n"
+        "shr $1, r%d\n"
+		"br L%d2S\n"
+		"L%d2E:\n",
+		right, negativeDivisor, negativeDivisor, negativeDivisor, uniqueNum, count, uniqueNum, count,
+        left, uniqueNum, left, uniqueNum, right, left, uniqueNum, uniqueNum, negativeDivisor, left,
+        uniqueNum, right, negativeDivisor, uniqueNum, uniqueNum);
+    // finally, we adjust the result. non-res can choose a negative remainder for integer division - we fix that here
+    fprintf(stdout,
+        "bgt r%d, C%d\n"
+        "beq r%d, C%d\n"
+        "add r1, r0\n"
+        "C%d:\n",
+        left, uniqueNum, left, uniqueNum, uniqueNum);
+	fprintf(stdout,
+		"ld (r5), r%d\n"
+		"inca r5\n"
+		"ld (r5), r%d\n"
+		"inca r5\n",
+		negativeDivisor, count);
+    uniqueNum++;
 }
 
 /*
