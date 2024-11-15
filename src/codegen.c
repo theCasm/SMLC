@@ -554,16 +554,16 @@ static void codegenDivide(int left, int right)
 	fprintf(stdout,
 		"ld $1, r%d\n"
 		"ld $0, r%d\n"
-		"L%d1S:\n"
+		"L%d_1S:\n"
 		"mov r%d, r%d\n"
 		"not r%d\n"
 		"inc r%d\n"
 		"add r%d, r%d\n"
-		"bgt r%d, L%d1E\n"
+		"bgt r%d, L%d_1E\n"
 		"inc r%d\n"
 		"shl $1, r%d\n"
-		"br L%d1S\n"
-		"L%d1E:\n",
+		"br L%d_1S\n"
+		"L%d_1E:\n",
 		count, result, uniqueNum, left, negativeDivisor, negativeDivisor, negativeDivisor, right, negativeDivisor,
 		negativeDivisor, uniqueNum, count, right, uniqueNum, uniqueNum);
 	// now, we do the division
@@ -571,22 +571,22 @@ static void codegenDivide(int left, int right)
 		"mov r%d, r%d\n"
 		"not r%d\n"
 		"inc r%d\n"
-		"L%d2S:\n"
-		"beq r%d, L%d2E\n"
+		"L%d_2S:\n"
+		"beq r%d, L%d_2E\n"
 		"dec r%d\n"
 		"shl $1, r%d\n"
-		"bgt r%d, L%d2C\n"
-		"beq r%d, L%d2C\n"
+		"bgt r%d, L%d_2C\n"
+		"beq r%d, L%d_2C\n"
 		"add r%d, r%d\n"
 		"dec r%d\n"
-		"br L%d2CE\n"
-		"L%d2C:\n"
+		"br L%d_2CE\n"
+		"L%d_2C:\n"
 		"add r%d, r%d\n"
 		"inc r%d\n"
-		"L%d2CE:\n"
+		"L%d_2CE:\n"
 		"shl $1, r%d\n"
-		"br L%d2S\n"
-		"L%d2E:\n",
+		"br L%d_2S\n"
+		"L%d_2E:\n",
 		right, negativeDivisor, negativeDivisor, negativeDivisor, uniqueNum, count, uniqueNum, count, result,
         left, uniqueNum, left, uniqueNum, right, left, result, uniqueNum, uniqueNum, negativeDivisor, left,
         result, uniqueNum, left, uniqueNum, uniqueNum);
@@ -633,16 +633,16 @@ static void codegenModulus(int left, int right)
 	// first, we shift the divisor so everything lines up
 	fprintf(stdout,
 		"ld $1, r%d\n"
-		"L%d1S:\n"
+		"L%d_1S:\n"
 		"mov r%d, r%d\n"
 		"not r%d\n"
 		"inc r%d\n"
 		"add r%d, r%d\n"
-		"bgt r%d, L%d1E\n"
+		"bgt r%d, L%d_1E\n"
 		"inc r%d\n"
 		"shl $1, r%d\n"
-		"br L%d1S\n"
-		"L%d1E:\n",
+		"br L%d_1S\n"
+		"L%d_1E:\n",
 		count, uniqueNum, left, negativeDivisor, negativeDivisor, negativeDivisor, right, negativeDivisor,
 		negativeDivisor, uniqueNum, count, right, uniqueNum, uniqueNum);
 	// now, we do the division
@@ -650,20 +650,20 @@ static void codegenModulus(int left, int right)
 		"mov r%d, r%d\n"
 		"not r%d\n"
 		"inc r%d\n"
-		"L%d2S:\n"
-		"beq r%d, L%d2E\n"
+		"L%d_2S:\n"
+		"beq r%d, L%d_2E\n"
 		"dec r%d\n"
-		"bgt r%d, L%d2C\n"
-		"beq r%d, L%d2C\n"
+		"bgt r%d, L%d_2C\n"
+		"beq r%d, L%d_2C\n"
 		"add r%d, r%d\n"
-		"br L%d2CE\n"
-		"L%d2C:\n"
+		"br L%d_2CE\n"
+		"L%d_2C:\n"
 		"add r%d, r%d\n"
-		"L%d2CE:\n"
+		"L%d_2CE:\n"
 		"shr $1, r%d\n"
         "shr $1, r%d\n"
-		"br L%d2S\n"
-		"L%d2E:\n",
+		"br L%d_2S\n"
+		"L%d_2E:\n",
 		right, negativeDivisor, negativeDivisor, negativeDivisor, uniqueNum, count, uniqueNum, count,
         left, uniqueNum, left, uniqueNum, right, left, uniqueNum, uniqueNum, negativeDivisor, left,
         uniqueNum, right, negativeDivisor, uniqueNum, uniqueNum);
