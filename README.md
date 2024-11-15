@@ -19,14 +19,8 @@ read the EBNF formal specification scattered in comments throughout the compiler
 
 # SMLC
 
-SMLC is meant to be a compiler for SML. As of now, it can parse the language and it's syntax
-error messages are even helpful sometimes. Its functionality includes:
-- basic syntax errors
-- contextual analysis that will occasionaly catch mistakes
-- code generation that does a memory access for every single variable access
-- if statements and loops that only work if they are short enough, otherwise the offset is too big 
-for the br, beq, bgt instructions to fit (and code is 90% longer bcs the memory access thing lol)
-- around half of the available infix notation expressions are implemented (the others default to adding)
+SMLC is a compiler for SML. With cutting edge technology like memory accesses everytime you want to check a variable's value, 
+it is truly fit for such a glorious language.
 
 ## Usage:
 1. Download the code
@@ -38,6 +32,4 @@ Then, run `./build/smlc < ./path/to/file.txt` (replacing ./path/to/file.txt with
 
 For example, to compile the test program `./testPrograms/valid/testFullProgram.txt` (which is the SML equivilant of a solution to Assignment 6 Q5) and save the output as q3.s, you would run  
 `./build/smlc < ./testPrograms/valid/testFullProgram.txt > q3.s`  
-Feel free to run q3.s in the simulator! Its a lot easier than writing all the assembly by hand.  
-Note that as this is being written, the current version of SMLC can only barely compile testFullProgram.  
-Some similar programs may not behave as expected, though this should be fixed soon. Feel free to experiment!
+Feel free to open up q3.s and add a test case! Its a lot easier than writing all the assembly by hand.  
