@@ -81,6 +81,9 @@ static void pass1(struct AST *tree)
 		if (child->val.type == FN_DECL) {
 			ident = child->val.children;
 			pushDef(ident->val.startIndex, ident->val.endIndex, child);
+			char *s = malloc(ident->val.endIndex - ident->val.startIndex + 1);
+			getInputSubstr(s, ident->val.startIndex, ident->val.endIndex);
+			fprintf(stderr, "added ident: %s\n", s);
 		}
 	}
 }

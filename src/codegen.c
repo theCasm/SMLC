@@ -91,6 +91,7 @@ static int isInFn = 0;
 static int uniqueNum = 0;
 static int frameArgOffset = 0;
 static int entireFrameOffset = 0;
+static char *fnname;
 
 /*
  * EFFECTS: outputs assembler for the program organized as such:
@@ -138,24 +139,22 @@ static void codegenProgram(struct ASTLinkedNode *program)
 */
 static void codegenFuncDecl(struct ASTLinkedNode *decl)
 {
-    char *name = calloc(decl->val.children->val.endIndex - decl->val.children->val.startIndex + 1, sizeof(char));
-    getInputSubstr(name, decl->val.children->val.startIndex, decl->val.children->val.endIndex);
-    fprintf(stdout, "%s:\n", name);
-    free(name);
-    fputs(saveAllGPRegs, stdout);
-    frameArgOffset += 24;
+    fnname = calloc(decl->val.children->val.endIndex - decl->val.children->val.startIndex + 1, sizeof(char));
+    getInputSubstr(fnname, decl->val.children->val.startIndex, decl->val.children->val.endIndex);
+    fprintf(stdout, "%s:\n", fnname);
     if (decl->val.clobbersReturn) {
         fputs("deca r5\t\t# save r6\nst r6, (r5)\n", stdout);
         frameArgOffset += 4;
     }
     if (decl->val.frameVars > 0) {
-        fprintf(stdout, "ld $-%d, r0\t\t# allocate local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+        fprintf(stdout, "ld $-%d, r7\t\t# allocate local vars\nadd r7, r5\n\n", 4*decl->val.frameVars);
         frameArgOffset += 4*decl->val.frameVars;
     }
     isInFn = 1;
     codegenSingleCommand(decl->val.children->next->next);
+    fprintf(stdout, "%s_RET:\n", fnname);
     if (decl->val.frameVars > 0) {
-        fprintf(stdout, "\nld $%d, r0\t\t# de-alloc local vars\nadd r0, r5\n\n", 4*decl->val.frameVars);
+        fprintf(stdout, "\nld $%d, r7\t\t# de-alloc local vars\nadd r7, r5\n\n", 4*decl->val.frameVars);
         frameArgOffset -= 4*decl->val.frameVars;
     }
 
@@ -163,8 +162,7 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl)
         fputs("ld (r5), r6\t\t# restore r6\ninca r5\n", stdout);
         frameArgOffset -= 4;
     }
-    fputs(restoreAllGPRegs, stdout);
-    frameArgOffset -= 24;
+    free(fnname);
     fputs("j (r6)\t\t# return\n\n", stdout);
 }
 
@@ -178,6 +176,7 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
         if (command->val.children) {
             codegenExpr(command->val.children, 0);
         }
+        fprintf(stdout, "j %s_RET\n", fnname);
         return;
     }
     struct ASTLinkedNode *temp, *child = command->val.children;
@@ -251,7 +250,7 @@ static void codegenFuncCall(struct ASTLinkedNode *call, int regDest)
         entireFrameOffset -= 4;
     }
     if (call->val.children->val.definition->val.paramCount > 0) {
-        fprintf(stdout, "ld $%d, r0\t\t# dealloc args\nadd r0, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
+        fprintf(stdout, "ld $%d, r7\t\t# dealloc args\nadd r7, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
         entireFrameOffset -= 4*call->val.children->val.definition->val.paramCount;
     }
 }

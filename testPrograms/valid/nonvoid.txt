@@ -1,0 +1,11 @@
+func non-void addfive(m) {
+    if (0) {
+        var c = 7 / 3
+    }
+    return m + 4 + 1
+}
+
+func void main() {
+    var a = 7
+    var m = addfive(a)
+}

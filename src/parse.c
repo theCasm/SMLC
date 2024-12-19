@@ -477,7 +477,7 @@ static struct ASTLinkedNode *parsePriority(int priority)
 static struct ASTLinkedNode *parsePrimaryExpr()
 {
 	struct Token *next = peek();
-	struct ASTLinkedNode *ans;
+	struct ASTLinkedNode *ans, *temp;
 	char *spelling;
 	switch (next->type) {
 	case NUMBER:
@@ -495,8 +495,12 @@ static struct ASTLinkedNode *parsePrimaryExpr()
 		ans = handleIdentifier();
 		next = peek();
 		if (next->type == LPAR) {
-			ans->val.type = FUNC_CALL;
-			ans->val.children = parseArgList();
+			//ans->val.type = FUNC_CALL;
+			//ans->val.children = parseArgList();
+			temp = newLinkedAstNode(FUNC_CALL);
+			temp->val.children = ans;
+			temp->val.children->next = parseArgList();
+			return temp;
 		}
 		return ans;
 	case LPAR:
