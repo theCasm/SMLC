@@ -81,9 +81,6 @@ static void pass1(struct AST *tree)
 		if (child->val.type == FN_DECL) {
 			ident = child->val.children;
 			pushDef(ident->val.startIndex, ident->val.endIndex, child);
-			char *s = malloc(ident->val.endIndex - ident->val.startIndex + 1);
-			getInputSubstr(s, ident->val.startIndex, ident->val.endIndex);
-			fprintf(stderr, "added ident: %s\n", s);
 		}
 	}
 }
@@ -190,7 +187,7 @@ static void pass2(struct ASTLinkedNode *curr)
 			exit(1);
 		}
 		struct ASTLinkedNode *args = ident->next;
-		temp = ident->val.definition->val.children->next;
+		temp = ident->val.definition->val.children->next->val.children;
 		for (child = args->val.children; child != NULL; child = child->next, temp = temp->next) {
 			if (temp == NULL) {
 				fputs("Too many args\n", stderr);
