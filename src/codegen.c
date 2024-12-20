@@ -30,7 +30,7 @@
 
 #define DEFAULT_DATA_TOP (0x2000)
 
-#define STACK_WORDS (128)
+#define STACK_WORDS (512)
 #define DEFAULT_STACK_TOP (0x3000)
 
 static void codegenProgram(struct ASTLinkedNode *program);
@@ -87,7 +87,6 @@ void generateCode(struct AST *tree)
     codegenProgram(tree->root);
 }
 
-static int isInFn = 0;
 static int uniqueNum = 0;
 static int frameArgOffset = 0;
 static int entireFrameOffset = 0;
@@ -150,7 +149,6 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl)
         fprintf(stdout, "ld $-%d, r7\t\t# allocate local vars\nadd r7, r5\n\n", 4*decl->val.frameVars);
         frameArgOffset += 4*decl->val.frameVars;
     }
-    isInFn = 1;
     codegenSingleCommand(decl->val.children->next->next);
     fprintf(stdout, "%s_RET:\n", fnname);
     if (decl->val.frameVars > 0) {
@@ -172,7 +170,6 @@ static void codegenFuncDecl(struct ASTLinkedNode *decl)
 static void codegenSingleCommand(struct ASTLinkedNode *command)
 {
     if (command->val.type == RETURN_DIRECTIVE) {
-        isInFn = 0;
         if (command->val.children) {
             codegenExpr(command->val.children, 0);
         }
@@ -203,7 +200,6 @@ static void codegenSingleCommand(struct ASTLinkedNode *command)
     case COMMAND:
         for (temp = child->val.children; temp != NULL; temp = temp->next) {
             codegenSingleCommand(temp);
-            if (!isInFn) break;
         }
         return;
     case DIRECT_ASSIGN:
@@ -244,14 +240,14 @@ static void codegenFuncCall(struct ASTLinkedNode *call, int regDest)
     getInputSubstr(name, call->val.children->val.startIndex, call->val.children->val.endIndex);
     fprintf(stdout, "gpc $6, r6\nj %s\n", name);
     free(name);
-    if(regDest != 0) {
-        fprintf(stdout, "mov r0, r%d\n", regDest);
-        fputs("ld (r5), r0\t\t# restore r0\ninca r5\n\n", stdout);
-        entireFrameOffset -= 4;
-    }
     if (call->val.children->val.definition->val.paramCount > 0) {
         fprintf(stdout, "ld $%d, r7\t\t# dealloc args\nadd r7, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
         entireFrameOffset -= 4*call->val.children->val.definition->val.paramCount;
+    }
+    if (regDest != 0) {
+        fprintf(stdout, "mov r0, r%d\n", regDest);
+        fputs("ld (r5), r0\t\t# restore r0\ninca r5\n\n", stdout);
+        entireFrameOffset -= 4;
     }
 }
 

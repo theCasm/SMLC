@@ -1,0 +1,8 @@
+func non-void triangle(n) {
+    if n == 0 return 0
+    return n + triangle(n - 1)
+}
+
+func non-void main() {
+    return triangle(100)
+}
