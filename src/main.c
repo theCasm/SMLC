@@ -17,7 +17,7 @@
 */
 #include "parse.h"
 #include "lex.h"
-#include "AST.h"
+#include "AST/AST.h"
 #include "contextualAnalysis.h"
 #include "codegen.h"
 #include <stdio.h>

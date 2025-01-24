@@ -26,7 +26,7 @@
 #include <stdlib.h>
 
 #include "codegen.h"
-#include "AST.h"
+#include "AST/AST.h"
 
 #define DEFAULT_DATA_TOP (0x2000)
 
@@ -61,26 +61,6 @@ static char startAsm[] = ".pos 0x1000\n"
     "gpc $6, r6\n"
     "j main\n"
     "halt\n\n";
-
-static char saveAllGPRegs[] = "deca r5\t\t# save all regs\n"
-    "st r0, (r5)\n"
-    "ld $-20, r0\n"
-    "add r0, r5\n"
-    "st r1, 16(r5)\n"
-    "st r2, 12(r5)\n"
-    "st r3, 8(r5)\n"
-    "st r4, 4(r5)\n"
-    "st r7, (r5)\n\n";
-
-static char restoreAllGPRegs[] = "\nld (r5), r7\t\t# restore all regs\n"
-    "ld 4(r5), r4\n"
-    "ld 8(r5), r3\n"
-    "ld 12(r5), r2\n"
-    "ld 16(r5), r1\n"
-    "ld $20, r0\n"
-    "add r0, r5\n"
-    "ld (r5), r0\n"
-    "inca r5\n\n";
 
 void generateCode(struct AST *tree)
 {
@@ -224,8 +204,10 @@ static void codegenFuncCall(struct ASTLinkedNode *call, int regDest)
 {
     struct ASTLinkedNode *temp;
     if (regDest != 0) {
-        fputs("deca r5\t\t# Save r0\nst r0, (r5)\n\n", stdout);
-        entireFrameOffset += 4;
+        for (int j = 0; j < regDest; j++) {
+            fprintf(stdout, "deca r5\t\t# Save r%d\nst r%d, (r5)\n\n", j, j);
+            entireFrameOffset += 4;
+        }
     }
     if (call->val.children->val.definition->val.paramCount > 0) {
         fprintf(stdout, "ld $-%d, r0\t\t# alloc args\nadd r0, r5\n\n", 4*call->val.children->val.definition->val.paramCount);
@@ -246,8 +228,10 @@ static void codegenFuncCall(struct ASTLinkedNode *call, int regDest)
     }
     if (regDest != 0) {
         fprintf(stdout, "mov r0, r%d\n", regDest);
-        fputs("ld (r5), r0\t\t# restore r0\ninca r5\n\n", stdout);
-        entireFrameOffset -= 4;
+        for (int j = 0; j < regDest; j++) {
+            fprintf(stdout, "ld (r5), r%d\t\t# restore r%d\ninca r5\n\n", j, j);
+            entireFrameOffset -= 4;
+        }
     }
 }
 

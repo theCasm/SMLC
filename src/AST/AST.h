@@ -2,7 +2,7 @@
 #define SML_AST_H
 
 #include <unistd.h>
-#include "lex.h"
+#include "../lex.h"
 
 enum NodeType {
     PROGRAM,

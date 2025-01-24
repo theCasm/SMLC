@@ -33,7 +33,7 @@
 #include <unistd.h>
 
 #include "contextualAnalysis.h"
-#include "AST.h"
+#include "AST/AST.h"
 #include "lex.h"
 
 struct definition {

@@ -16,8 +16,7 @@
  * SMLC. If not, see <https://www.gnu.org/licenses/>. 
 */
 #include "AST.h"
-#include "lex.h"
-#include "codegen.h"
+#include "../lex.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
